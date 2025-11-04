@@ -1,5 +1,5 @@
-div.login {
-    /* centraliza na viewport sem alterar body */
+div.register {
+        /* centraliza na viewport sem alterar body */
     position: fixed;
     top: 50%;
     left: 50%;
@@ -7,8 +7,8 @@ div.login {
 
     /* ...mantém suas regras existentes... */
     border: 1px solid black;
-    height: 370px;
-    width: 300px;
+    height: 600px;
+    width: 400px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -21,22 +21,17 @@ div.login {
     box-shadow: 3px 3px 5px lightgray;
 }
 
-p.login {
+p.register {
     margin: 0;
     font-size: 18px;
 }
 
-#alert {
-    color: red;
-}
-
-input.login {
+input.register {
     min-width: 0;
     flex: 0 1 auto;
     width: 80%;      /* ou use um valor fixo como 200px */
-    max-width: 240px;
+    max-width: 320px;
     height: 30px;
-    padding-bottom: 15px;
     border-radius: 5px;
     border: 1px solid gray;
     font-size: 16px;
@@ -45,21 +40,28 @@ input.login {
     text-justify: center;
 }
 
-body{
-    background-color: beige;
-}
-button.login{
-    width: 100px;
-    height: 35px;
+button.register{
+    width: 120px;
+    height: 50px;
     border-radius: 5px;
+    margin-top: 10px;
     border: 1px solid gray;
     font-size: 16px;
     background-color: white;
     cursor: pointer;
 }
 
-span{
-    color: blue;
-    text-decoration: underline;
-    cursor: pointer;
+select.register{
+    min-width: 0;
+    flex: 0 1 auto;
+    width: 80%;      /* ou use um valor fixo como 200px */
+    max-width: 320px;
+    height: 35px;
+    padding-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid gray;
+    font-size: 16px;
+    box-shadow: 3px 3px 3px lightgray;
+    text-align: center;
+    text-justify: center;
 }
