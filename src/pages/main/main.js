@@ -3,7 +3,7 @@ import './main.css'
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth'
 import { auth, userInfoCollection } from '../../firebase'
 import { useNavigate } from 'react-router-dom'
-import {doc, setDoc, serverTimestamp, query, where, getDocs} from 'firebase/firestore'
+import { doc, setDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore'
 import Navbar from '../navbar/navbar'
 
 export default function Main() {
@@ -18,7 +18,7 @@ export default function Main() {
             if (user) {
                 const created = await findUserByEmail(user.email)
                 const email = user.email
-                if (created === false) navigate('/registrar', { replace: true, state: {email, from: "login"} })
+                if (created === false) navigate('/registrar', { replace: true, state: { email, from: "login" } })
                 else navigate('/dashboard', { replace: true })
             }
         })
@@ -57,9 +57,11 @@ export default function Main() {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, senha)
             console.log('Logado: ', userCredential.user)
+            const user = userCredential.user
+            const created = await findUserByEmail(user.email)
             if (await findUserByEmail(userCredential.user.email) == false) {
                 const email = user.email
-                if (created === false) navigate('/registrar', { replace: true, state: {email, from: "login"} })
+                if (created === false) navigate('/registrar', { replace: true, state: { email, from: "login" } })
             }
             else navigate('/dashboard', { replace: true })
         } catch (err) {
@@ -70,16 +72,16 @@ export default function Main() {
 
     return (
         <>
-        <div className='login'>
-            <h1 className='login'>{mode == 'login' ? 'Fazer login' : 'Fazer cadastro'}</h1>
-            <p className='login'>email</p>
-            <input type='email' onChange={e => setEmail(e.target.value)} className='login'></input>
-            <p className='login'>senha</p>
-            <input className='login' type='password' onChange={e => setSenha(e.target.value)}></input>
-            <p id='alert' className='login'>{alert}</p>
-            <button className='login' onClick={mode == 'login' ? handleLogin : handleRegister}>{mode == 'login' ? 'Entrar' : 'Criar'}</button>
-            <span className='login' onClick={handleTradeAction}>{mode == 'login' ? 'criar conta' : 'fazer login'}</span>
-        </div>
+            <div className='login'>
+                <h1 className='login'>{mode == 'login' ? 'Fazer login' : 'Fazer cadastro'}</h1>
+                <p className='login'>email</p>
+                <input type='email' onChange={e => setEmail(e.target.value)} className='login'></input>
+                <p className='login'>senha</p>
+                <input className='login' type='password' onChange={e => setSenha(e.target.value)}></input>
+                <p id='alert' className='login'>{alert}</p>
+                <button className='login' onClick={mode == 'login' ? handleLogin : handleRegister}>{mode == 'login' ? 'Entrar' : 'Criar'}</button>
+                <span className='login' onClick={handleTradeAction}>{mode == 'login' ? 'criar conta' : 'fazer login'}</span>
+            </div>
         </>
     )
 }
