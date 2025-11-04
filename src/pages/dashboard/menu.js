@@ -2,6 +2,7 @@ import { auth } from '../../firebase'
 import { useNavigate } from 'react-router-dom'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { useEffect } from 'react'
+import Navbar from '../navbar/navbar'
 
 export default function Dashboard() {
 
@@ -23,9 +24,11 @@ export default function Dashboard() {
     }
 
     return (
+        <>
+        <Navbar></Navbar>
         <div>
-            <p>Aqui vai ser o dashboard</p>
             <button onClick={handleLogout}>logout</button>
         </div>
+        </>
     )
 }
