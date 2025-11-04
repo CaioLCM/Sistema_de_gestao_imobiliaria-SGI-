@@ -1,0 +1,62 @@
+div.login {
+    border: 1px solid black;
+    height: 370px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;    /* empilha texto em cima e input embaixo */
+    align-items: center;       /* centra horizontalmente */
+    justify-content: center;   /* centra verticalmente */
+    gap: 12px;                 /* espaço entre texto e input */
+    box-sizing: border-box;
+    padding: 12px;
+    text-align: center;
+    background-color: bisque;
+    box-shadow: 3px 3px 5px lightgray;
+}
+
+p.login {
+    margin: 0;
+    font-size: 18px;
+}
+
+#alert {
+    color: red;
+}
+
+input.login {
+    min-width: 0;
+    flex: 0 1 auto;
+    width: 80%;      /* ou use um valor fixo como 200px */
+    max-width: 240px;
+    height: 30px;
+    padding-bottom: 15px;
+    border-radius: 5px;
+    border: 1px solid gray;
+    font-size: 16px;
+    box-shadow: 3px 3px 3px lightgray;
+    text-align: center;
+    text-justify: center;
+}
+
+body{
+    justify-content: center;
+    align-items: center;
+    display: flex;
+    height: 70vh;
+    background-color: beige;
+}
+button.login{
+    width: 100px;
+    height: 35px;
+    border-radius: 5px;
+    border: 1px solid gray;
+    font-size: 16px;
+    background-color: white;
+    cursor: pointer;
+}
+
+span{
+    color: blue;
+    text-decoration: underline;
+    cursor: pointer;
+}
