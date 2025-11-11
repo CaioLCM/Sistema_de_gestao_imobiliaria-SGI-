@@ -22,5 +22,8 @@ export const auth = getAuth(app);
 // init firestore
 export const db = getFirestore(app);
 
-// collection ref
+// collection refs
 export const userInfoCollection = collection(db, 'user_info');
+export const imoveisCollection = collection(db, 'imoveis');
+export const pagamentosCollection = collection(db, 'pagamentos');
+export const documentosCollection = collection(db, 'documentos');
