@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { imoveisCollection, pagamentosCollection, documentosCollection, userInfoCollection } from '../../../firebase'
 import { getDocs, query, where } from 'firebase/firestore'
 import './geral.css'
@@ -15,11 +15,7 @@ export default function Geral({ userInfo }) {
     })
     const [loading, setLoading] = useState(true)
 
-    useEffect(() => {
-        loadStats()
-    }, [userInfo])
-
-    async function loadStats() {
+    const loadStats = useCallback(async () => {
         try {
             setLoading(true)
             
@@ -77,7 +73,11 @@ export default function Geral({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [userInfo])
+
+    useEffect(() => {
+        loadStats()
+    }, [loadStats])
 
     if (loading) {
         return (

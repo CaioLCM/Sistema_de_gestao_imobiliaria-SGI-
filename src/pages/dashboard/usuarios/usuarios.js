@@ -48,10 +48,6 @@ export default function Usuarios({ userInfo }) {
         setAlert('')
         setCreating(true)
 
-        // Salvar credenciais do admin atual
-        const currentUser = auth.currentUser
-        const adminEmail = currentUser.email
-
         try {
             // Criar usuário no Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(

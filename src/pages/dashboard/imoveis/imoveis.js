@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { imoveisCollection, db, userInfoCollection } from '../../../firebase'
+import { useState, useEffect, useCallback } from 'react'
+import { imoveisCollection, db } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './imoveis.css'
 
@@ -30,11 +30,7 @@ export default function Imoveis({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
-    useEffect(() => {
-        loadImoveis()
-    }, [userInfo, filtros])
-
-    async function loadImoveis() {
+    const loadImoveis = useCallback(async () => {
         try {
             setLoading(true)
             let imoveisQuery = imoveisCollection
@@ -78,7 +74,11 @@ export default function Imoveis({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [userInfo, filtros, isAdmin, isCorretor])
+
+    useEffect(() => {
+        loadImoveis()
+    }, [loadImoveis])
 
     function handleOpenModal(imovel = null) {
         if (imovel) {

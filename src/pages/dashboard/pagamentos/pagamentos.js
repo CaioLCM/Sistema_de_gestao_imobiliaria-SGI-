@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { pagamentosCollection, db, imoveisCollection, userInfoCollection } from '../../../firebase'
+import { useState, useEffect, useCallback } from 'react'
+import { pagamentosCollection, db, imoveisCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './pagamentos.css'
 
@@ -22,12 +22,7 @@ export default function Pagamentos({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
-    useEffect(() => {
-        loadImoveis()
-        loadPagamentos()
-    }, [userInfo])
-
-    async function loadImoveis() {
+    const loadImoveis = useCallback(async () => {
         try {
             let imoveisQuery = imoveisCollection
             if (!isAdmin && !isCorretor) {
@@ -42,9 +37,9 @@ export default function Pagamentos({ userInfo }) {
         } catch (err) {
             console.error('Erro ao carregar imóveis:', err)
         }
-    }
+    }, [isAdmin, isCorretor, userInfo?.uid])
 
-    async function loadPagamentos() {
+    const loadPagamentos = useCallback(async () => {
         try {
             setLoading(true)
             let pagamentosQuery = pagamentosCollection
@@ -82,7 +77,12 @@ export default function Pagamentos({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [isAdmin, isCorretor, userInfo?.uid])
+
+    useEffect(() => {
+        loadImoveis()
+        loadPagamentos()
+    }, [loadImoveis, loadPagamentos])
 
     function handleOpenModal(pagamento = null) {
         if (pagamento) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { documentosCollection, db, imoveisCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './documentos.css'
@@ -21,12 +21,7 @@ export default function Documentos({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
-    useEffect(() => {
-        loadImoveis()
-        loadDocumentos()
-    }, [userInfo])
-
-    async function loadImoveis() {
+    const loadImoveis = useCallback(async () => {
         try {
             let imoveisQuery = imoveisCollection
             if (!isAdmin && !isCorretor) {
@@ -38,12 +33,14 @@ export default function Documentos({ userInfo }) {
                 ...doc.data()
             }))
             setImoveis(imoveisList)
+            return imoveisList
         } catch (err) {
             console.error('Erro ao carregar imóveis:', err)
+            return []
         }
-    }
+    }, [isAdmin, isCorretor, userInfo?.uid])
 
-    async function loadDocumentos() {
+    const loadDocumentos = useCallback(async (imoveisList) => {
         try {
             setLoading(true)
             let documentosQuery = documentosCollection
@@ -56,21 +53,10 @@ export default function Documentos({ userInfo }) {
                 id: doc.id,
                 ...doc.data()
             }))
-
-            // Carregar imóveis para relacionar
-            let imoveisQuery = imoveisCollection
-            if (!isAdmin && !isCorretor) {
-                imoveisQuery = query(imoveisCollection, where('clienteId', '==', userInfo?.uid))
-            }
-            const imoveisSnapshot = await getDocs(imoveisQuery)
-            const allImoveis = imoveisSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
             
             // Buscar dados dos imóveis
             const documentosCompleto = documentosList.map(documento => {
-                const imovel = allImoveis.find(i => i.id === documento.imovelId)
+                const imovel = imoveisList.find(i => i.id === documento.imovelId)
                 return {
                     ...documento,
                     imovel: imovel
@@ -84,8 +70,18 @@ export default function Documentos({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [isAdmin, isCorretor, userInfo?.uid])
 
+    useEffect(() => {
+        loadImoveis()
+    }, [loadImoveis])
+
+    useEffect(() => {
+        if (imoveis.length >= 0) {
+            loadDocumentos(imoveis)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [imoveis])
 
     function handleOpenModal(documento = null) {
         if (documento) {
@@ -134,7 +130,7 @@ export default function Documentos({ userInfo }) {
             }
 
             setShowModal(false)
-            loadDocumentos()
+            loadDocumentos(imoveis)
         } catch (err) {
             console.error('Erro ao salvar documento:', err)
             setAlert('Erro ao salvar documento: ' + err.message)
@@ -149,7 +145,7 @@ export default function Documentos({ userInfo }) {
         try {
             await deleteDoc(doc(db, 'documentos', id))
             setAlert('Documento excluído com sucesso!')
-            loadDocumentos()
+            loadDocumentos(imoveis)
         } catch (err) {
             console.error('Erro ao excluir documento:', err)
             setAlert('Erro ao excluir documento')
