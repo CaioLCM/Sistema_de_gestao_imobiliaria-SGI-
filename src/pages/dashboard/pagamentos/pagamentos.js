@@ -24,10 +24,8 @@ export default function Pagamentos({ userInfo }) {
 
     const loadImoveis = useCallback(async () => {
         try {
+            // Permitimos que clientes vejam a lista de imóveis para selecionar no pagamento.
             let imoveisQuery = imoveisCollection
-            if (!isAdmin && !isCorretor) {
-                imoveisQuery = query(imoveisCollection, where('clienteId', '==', userInfo?.uid))
-            }
             const snapshot = await getDocs(imoveisQuery)
             const imoveisList = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -42,10 +40,8 @@ export default function Pagamentos({ userInfo }) {
     const loadPagamentos = useCallback(async () => {
         try {
             setLoading(true)
+            // Pagamentos: clientes podem ver pagamentos (lista completa). A criação/edição segue restrita.
             let pagamentosQuery = pagamentosCollection
-            if (!isAdmin && !isCorretor) {
-                pagamentosQuery = query(pagamentosCollection, where('clienteId', '==', userInfo?.uid))
-            }
 
             const snapshot = await getDocs(pagamentosQuery)
             const pagamentosList = snapshot.docs.map(doc => ({

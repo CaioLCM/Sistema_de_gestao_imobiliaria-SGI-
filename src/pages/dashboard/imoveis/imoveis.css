@@ -55,39 +55,136 @@
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+:root{
+    --filter-bg: #ffffff;
+    --filter-border: #e6e9ee;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --danger: #dc2626;
+    --radius: 8px;
+}
+
+/* Filters panel container */
+.filters-container {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--filter-bg);
+    border: 1px solid var(--filter-border);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 160px;
+}
+
+.filter-group label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.filter-group input[type="text"],
+.filter-group input[type="number"],
+.filter-group select {
+    height: 36px;
+    padding: 6px 10px;
+    border: 1px solid var(--filter-border);
+    border-radius: 6px;
+    background: #fbfdff;
+    outline: none;
+    transition: box-shadow .15s ease, border-color .15s ease;
+}
+
+.filter-group input[type="text"]::placeholder,
+.filter-group input[type="number"]::placeholder {
+    color: #9aa3b2;
+}
+
+.filter-group input[type="text"]:focus,
+.filter-group input[type="number"]:focus,
+.filter-group select:focus {
+    border-color: rgba(37,99,235,0.9);
+    box-shadow: 0 4px 12px rgba(37,99,235,0.08);
+}
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-apply, .btn-clear {
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-apply {
+    background: var(--accent);
+    color: white;
+}
+
+.btn-clear {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--filter-border);
+}
+
+.filters-inline {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Responsive: stack filters on small screens */
+@media (max-width: 760px) {
+    .filters-container {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .filter-group { min-width: 100%; }
+    .filters-inline { flex-direction: column; gap: 8px; align-items: stretch; }
+}
+
+/* Imóveis grid and card tweaks */
 .imoveis-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
 }
 
 .imovel-card {
-    background: white;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-}
-
-.imovel-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-}
-
-.imovel-header {
+    background: #fff;
+    border: 1px solid var(--filter-border);
+    border-radius: 10px;
+    padding: 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.imovel-header h3 {
-    font-size: 18px;
-    font-weight: 700;
-    color: #2d3748;
-    margin: 0;
-    flex: 1;
-}
+.imovel-actions { display: flex; gap: 8px; margin-top: auto; }
+.btn-edit { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 10px; border-radius:6px; cursor:pointer }
+.btn-danger { background: var(--danger); color: white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer }
+
+/* Small utility */
+.filters-container .small { font-size:12px; color:var(--muted) }
+
+/* keep legacy selectors for compatibility */
+div.filter { display:none; }
+div.local, div.agrupador, div.financeiro { display:block }
+select.select-financeiro { margin-top:0; padding-top:0 }
 
 .status-badge {
     padding: 4px 12px;

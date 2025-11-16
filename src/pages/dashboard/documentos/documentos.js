@@ -23,10 +23,8 @@ export default function Documentos({ userInfo }) {
 
     const loadImoveis = useCallback(async () => {
         try {
+            // Todos os usuários podem ver a lista de imóveis; manteremos criação/edição restritas.
             let imoveisQuery = imoveisCollection
-            if (!isAdmin && !isCorretor) {
-                imoveisQuery = query(imoveisCollection, where('clienteId', '==', userInfo?.uid))
-            }
             const snapshot = await getDocs(imoveisQuery)
             const imoveisList = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -43,10 +41,8 @@ export default function Documentos({ userInfo }) {
     const loadDocumentos = useCallback(async (imoveisList) => {
         try {
             setLoading(true)
+            // Documentos: permitir visualização geral para clientes também.
             let documentosQuery = documentosCollection
-            if (!isAdmin && !isCorretor) {
-                documentosQuery = query(documentosCollection, where('clienteId', '==', userInfo?.uid))
-            }
 
             const snapshot = await getDocs(documentosQuery)
             const documentosList = snapshot.docs.map(doc => ({

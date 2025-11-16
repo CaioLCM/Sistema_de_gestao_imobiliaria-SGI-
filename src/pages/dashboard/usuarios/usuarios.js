@@ -162,29 +162,46 @@ export default function Usuarios({ userInfo }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {usuarios.map(usuario => (
-                            <tr key={usuario.id}>
-                                <td>{usuario.nome}</td>
-                                <td>{usuario.email}</td>
-                                <td>{usuario.cpf || '-'}</td>
-                                <td>{usuario.telefone || '-'}</td>
-                                <td>
-                                    <span className={`badge badge-${usuario.tipoConta}`}>
-                                        {usuario.tipoConta === 'adm' ? 'Administrador' :
-                                         usuario.tipoConta === 'corretor' ? 'Corretor' : 'Cliente'}
-                                    </span>
-                                </td>
-                                <td>
-                                    <button 
-                                        className="btn-danger btn-sm"
-                                        onClick={() => handleDeleteUser(usuario.id)}
-                                        disabled={usuario.id === userInfo?.uid}
-                                    >
-                                        Excluir
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
+                        {usuarios.map(usuario => {
+                            const nome = usuario.nome || usuario.name || usuario.email || '-'
+                            const cpf = usuario.cpf || '-'
+                            const telefone = usuario.telefone || '-'
+                            const rawTipo = (usuario.tipoConta || '').toString().toLowerCase()
+                            let tipoKey = 'cliente'
+                            let tipoLabel = 'Cliente'
+                            if (rawTipo.includes('adm') || rawTipo.includes('administrador') || rawTipo.includes('admin')) {
+                                tipoKey = 'adm'
+                                tipoLabel = 'Administrador'
+                            } else if (rawTipo.includes('corretor')) {
+                                tipoKey = 'corretor'
+                                tipoLabel = 'Corretor'
+                            }
+
+                            const disableDelete = usuario.id === userInfo?.uid || usuario.uid === userInfo?.uid
+
+                            return (
+                                <tr key={usuario.id}>
+                                    <td>{nome}</td>
+                                    <td>{usuario.email || '-'}</td>
+                                    <td>{cpf}</td>
+                                    <td>{telefone}</td>
+                                    <td>
+                                        <span className={`badge badge-${tipoKey}`}>
+                                            {tipoLabel}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button 
+                                            className="btn-danger btn-sm"
+                                            onClick={() => handleDeleteUser(usuario.id)}
+                                            disabled={disableDelete}
+                                        >
+                                            Excluir
+                                        </button>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>

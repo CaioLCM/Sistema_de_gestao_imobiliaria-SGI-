@@ -1,8 +1,9 @@
-import { auth, userInfoCollection } from '../../firebase'
+import { auth, db } from '../../firebase'
 import { useNavigate } from 'react-router-dom'
 import { signOut, onAuthStateChanged } from 'firebase/auth'
 import { useEffect, useState } from 'react'
-import { query, where, getDocs } from 'firebase/firestore'
+import { doc, getDoc, query, where, getDocs } from 'firebase/firestore'
+import { userInfoCollection } from '../../firebase'
 import Geral from './geral/geral'
 import "./menu.css"
 import Imoveis from './imoveis/imoveis'
@@ -22,18 +23,39 @@ export default function Dashboard() {
                 navigate('/', { replace: true })
                 return
             }
-            
-            // Buscar informações do usuário
+            // Buscar informações do usuário pelo UID (recomendado)
+            function normalize(userData, docId) {
+                const normalized = { ...userData }
+                // ensure uid
+                normalized.uid = normalized.uid || docId || user.uid
+                // normalize name fields
+                normalized.nome = normalized.nome || normalized.name || normalized.fullName || ''
+                // normalize tipoConta to short keys used in app
+                const t = (normalized.tipoConta || '').toString().toLowerCase()
+                if (t.includes('adm') || t.includes('admin') || t.includes('administrador')) normalized.tipoConta = 'adm'
+                else if (t.includes('corretor')) normalized.tipoConta = 'corretor'
+                else normalized.tipoConta = 'cliente'
+                return normalized
+            }
+
             try {
-                const q = query(userInfoCollection, where('email', '==', user.email))
-                const snapshot = await getDocs(q)
-                if (!snapshot.empty) {
-                    const userData = snapshot.docs[0].data()
-                    setUserInfo(userData)
+                // Primeiro tenta buscar pelo UID (prática recomendada)
+                const ref = doc(db, 'user_info', user.uid)
+                const snap = await getDoc(ref)
+                if (snap.exists()) {
+                    setUserInfo(normalize(snap.data(), snap.id))
                 } else {
-                    // Se não tem perfil, fazer logout
-                    await signOut(auth)
-                    navigate('/', { replace: true })
+                    // fallback: buscar por email (caso o documento não use uid como id)
+                    const q = query(userInfoCollection, where('email', '==', user.email))
+                    const snapshot = await getDocs(q)
+                    if (!snapshot.empty) {
+                        const userData = snapshot.docs[0].data()
+                        setUserInfo(normalize(userData, snapshot.docs[0].id))
+                    } else {
+                        // Se não tem perfil, fazer logout
+                        await signOut(auth)
+                        navigate('/', { replace: true })
+                    }
                 }
             } catch (err) {
                 console.error('Erro ao buscar usuário:', err)
@@ -62,18 +84,22 @@ export default function Dashboard() {
                 </div>
             )
         }
+        // permissões derivadas do tipo de conta
+        const isAdmin = userInfo?.tipoConta === 'adm'
+        const isCorretor = userInfo?.tipoConta === 'corretor'
+        const canEdit = isAdmin || isCorretor
 
         switch (aba) {
             case "geral":
-                return <Geral userInfo={userInfo} />
+                return <Geral userInfo={userInfo} canEdit={canEdit} />
             case "imoveis":
-                return <Imoveis userInfo={userInfo} />
+                return <Imoveis userInfo={userInfo} canEdit={canEdit} />
             case "pagamentos":
-                return <Pagamentos userInfo={userInfo} />
+                return <Pagamentos userInfo={userInfo} canEdit={canEdit} />
             case "documentos":
-                return <Documentos userInfo={userInfo} />
+                return <Documentos userInfo={userInfo} canEdit={canEdit} />
             case "contas":
-                return <Usuarios userInfo={userInfo} />
+                return <Usuarios userInfo={userInfo} canCreateAccounts={isAdmin} />
             default:
                 return <div className="dashboard-content">Página não encontrada</div>
         }
@@ -88,6 +114,7 @@ export default function Dashboard() {
     }
 
     const isAdmin = userInfo?.tipoConta === 'adm'
+    const isCorretor = userInfo?.tipoConta === 'corretor'
 
     return (
         <div className="dashboard-container">

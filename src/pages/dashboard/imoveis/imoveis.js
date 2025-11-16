@@ -25,6 +25,12 @@ export default function Imoveis({ userInfo }) {
         valorMin: '',
         valorMax: ''
     })
+    const [filterInputs, setFilterInputs] = useState({
+        localidade: '',
+        tipo: '',
+        valorMin: '',
+        valorMax: ''
+    })
     const [alert, setAlert] = useState('')
 
     const isAdmin = userInfo?.tipoConta === 'adm'
@@ -35,11 +41,8 @@ export default function Imoveis({ userInfo }) {
             setLoading(true)
             let imoveisQuery = imoveisCollection
 
-            // Aplicar filtros de permissão
-            if (!isAdmin && !isCorretor) {
-                // Cliente vê apenas seus imóveis
-                imoveisQuery = query(imoveisCollection, where('clienteId', '==', userInfo?.uid))
-            }
+            // Visualização: todos os usuários (inclusive clientes) podem ver a listagem completa.
+            // Apenas a criação/edição/exclusão estão restritas a admins/corretores.
 
             const snapshot = await getDocs(imoveisQuery)
             let imoveisList = snapshot.docs.map(doc => ({
@@ -111,6 +114,24 @@ export default function Imoveis({ userInfo }) {
         setShowModal(true)
         setAlert('')
     }
+
+    function handleApply() {
+        setFiltros({ ...filterInputs })
+    }
+
+    function handleClear() {
+        const empty = { localidade: '', tipo: '', valorMin: '', valorMax: '' }
+        setFilterInputs(empty)
+        setFiltros(empty)
+    }
+
+    // Debounce auto-apply: aplica filtros 400ms após o usuário parar de digitar
+    useEffect(() => {
+        const id = setTimeout(() => {
+            setFiltros({ ...filterInputs })
+        }, 400)
+        return () => clearTimeout(id)
+    }, [filterInputs])
 
     async function handleSubmit(e) {
         e.preventDefault()
@@ -201,15 +222,15 @@ export default function Imoveis({ userInfo }) {
                     <input
                         type="text"
                         placeholder="Ex: Itajubá"
-                        value={filtros.localidade}
-                        onChange={(e) => setFiltros({ ...filtros, localidade: e.target.value })}
+                        value={filterInputs.localidade}
+                        onChange={(e) => setFilterInputs({ ...filterInputs, localidade: e.target.value })}
                     />
                 </div>
                 <div className="filter-group">
                     <label>Tipo</label>
                     <select
-                        value={filtros.tipo}
-                        onChange={(e) => setFiltros({ ...filtros, tipo: e.target.value })}
+                        value={filterInputs.tipo}
+                        onChange={(e) => setFilterInputs({ ...filterInputs, tipo: e.target.value })}
                     >
                         <option value="">Todos</option>
                         <option value="venda">Venda</option>
@@ -221,8 +242,8 @@ export default function Imoveis({ userInfo }) {
                     <input
                         type="number"
                         placeholder="R$ 0"
-                        value={filtros.valorMin}
-                        onChange={(e) => setFiltros({ ...filtros, valorMin: e.target.value })}
+                        value={filterInputs.valorMin}
+                        onChange={(e) => setFilterInputs({ ...filterInputs, valorMin: e.target.value })}
                     />
                 </div>
                 <div className="filter-group">
@@ -230,9 +251,14 @@ export default function Imoveis({ userInfo }) {
                     <input
                         type="number"
                         placeholder="R$ 0"
-                        value={filtros.valorMax}
-                        onChange={(e) => setFiltros({ ...filtros, valorMax: e.target.value })}
+                        value={filterInputs.valorMax}
+                        onChange={(e) => setFilterInputs({ ...filterInputs, valorMax: e.target.value })}
                     />
+                </div>
+
+                <div className="filter-actions">
+                    <button type="button" className="btn-clear" onClick={handleClear}>Limpar</button>
+                    <button type="button" className="btn-apply" onClick={handleApply}>Aplicar</button>
                 </div>
             </div>
 

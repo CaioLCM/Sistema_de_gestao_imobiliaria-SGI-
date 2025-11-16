@@ -24,27 +24,18 @@ export default function Geral({ userInfo }) {
             const isCorretor = userInfo?.tipoConta === 'corretor'
 
             // Total de imóveis
+            // Todos os usuários podem ver as estatísticas baseadas nas coleções completas.
             let imoveisQuery = imoveisCollection
-            if (!isAdmin && !isCorretor) {
-                // Cliente vê apenas seus imóveis
-                imoveisQuery = query(imoveisCollection, where('clienteId', '==', userInfo?.uid))
-            }
             const imoveisSnapshot = await getDocs(imoveisQuery)
             const imoveis = imoveisSnapshot.docs.map(doc => doc.data())
             
             // Total de pagamentos
             let pagamentosQuery = pagamentosCollection
-            if (!isAdmin && !isCorretor) {
-                pagamentosQuery = query(pagamentosCollection, where('clienteId', '==', userInfo?.uid))
-            }
             const pagamentosSnapshot = await getDocs(pagamentosQuery)
             const pagamentos = pagamentosSnapshot.docs.map(doc => doc.data())
 
             // Total de documentos
             let documentosQuery = documentosCollection
-            if (!isAdmin && !isCorretor) {
-                documentosQuery = query(documentosCollection, where('clienteId', '==', userInfo?.uid))
-            }
             const documentosSnapshot = await getDocs(documentosQuery)
 
             // Total de usuários (apenas admin)
