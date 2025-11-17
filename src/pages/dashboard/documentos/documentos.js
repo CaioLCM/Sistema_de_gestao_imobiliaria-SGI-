@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { documentosCollection, db, imoveisCollection, userInfoCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './documentos.css'
+import { useAuth } from '../../../context/AuthContext'
 
-export default function Documentos({ userInfo }) {
+export default function Documentos({  }) {
+    const { userProfile } = useAuth()
+    const userInfo = userProfile
     const [documentos, setDocumentos] = useState([])
     const [imoveis, setImoveis] = useState([])
     const [clientes, setClientes] = useState([])

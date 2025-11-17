@@ -3,7 +3,9 @@ import { pagamentosCollection, db, imoveisCollection, userInfoCollection } from 
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './pagamentos.css'
 
-export default function Pagamentos({ userInfo }) {
+export default function Pagamentos({  }) {
+    const { userProfile } = useAuth()
+    const userInfo = userProfile
     const [pagamentos, setPagamentos] = useState([])
     const [imoveis, setImoveis] = useState([])
     const [clientes, setClientes] = useState([])
