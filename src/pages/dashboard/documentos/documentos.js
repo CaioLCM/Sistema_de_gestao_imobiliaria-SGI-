@@ -41,14 +41,31 @@ export default function Documentos({ userInfo }) {
     const loadDocumentos = useCallback(async (imoveisList) => {
         try {
             setLoading(true)
-            // Documentos: permitir visualização geral para clientes também.
             let documentosQuery = documentosCollection
 
             const snapshot = await getDocs(documentosQuery)
-            const documentosList = snapshot.docs.map(doc => ({
+            let documentosList = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }))
+
+            // Filtrar por cliente: clientes só veem documentos associados a eles
+            if (!isAdmin && !isCorretor) {
+                const clienteId = userInfo?.uid || userInfo?.id
+                // Filtrar documentos por imóvel do cliente ou clienteId direto
+                documentosList = documentosList.filter(d => {
+                    // Verificar se o documento está vinculado a um imóvel do cliente
+                    const imovel = imoveisList.find(i => i.id === d.imovelId)
+                    if (imovel) {
+                        return imovel.clienteProprietario === clienteId || 
+                               imovel.clienteProprietario === userInfo?.id ||
+                               imovel.clienteId === clienteId ||
+                               imovel.clienteId === userInfo?.id
+                    }
+                    // Verificar se o documento tem clienteId direto
+                    return d.clienteId === clienteId || d.clienteId === userInfo?.id
+                })
+            }
             
             // Buscar dados dos imóveis
             const documentosCompleto = documentosList.map(documento => {
@@ -66,7 +83,7 @@ export default function Documentos({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }, [isAdmin, isCorretor, userInfo?.uid])
+    }, [isAdmin, isCorretor, userInfo])
 
     useEffect(() => {
         loadImoveis()
@@ -114,11 +131,18 @@ export default function Documentos({ userInfo }) {
             }
 
             if (editingDocumento) {
+                // Apenas Admin pode editar
+                if (!isAdmin) {
+                    setAlert('Apenas administradores podem editar documentos')
+                    return
+                }
                 await updateDoc(doc(db, 'documentos', editingDocumento.id), documentoData)
                 setAlert('Documento atualizado com sucesso!')
             } else {
+                // Admin e Corretor podem cadastrar
                 if (!isAdmin && !isCorretor) {
-                    documentoData.clienteId = userInfo?.uid
+                    setAlert('Apenas administradores e corretores podem cadastrar documentos')
+                    return
                 }
                 documentoData.createdAt = serverTimestamp()
                 await addDoc(documentosCollection, documentoData)
@@ -134,6 +158,12 @@ export default function Documentos({ userInfo }) {
     }
 
     async function handleDelete(id) {
+        // Apenas Admin pode excluir
+        if (!isAdmin) {
+            setAlert('Apenas administradores podem excluir documentos')
+            return
+        }
+
         if (!window.confirm('Tem certeza que deseja excluir este documento?')) {
             return
         }
@@ -160,7 +190,7 @@ export default function Documentos({ userInfo }) {
         <div className="documentos-container">
             <div className="documentos-header">
                 <h1>Gerenciamento de Documentos</h1>
-                {isCorretor && (
+                {(isAdmin || isCorretor) && (
                     <button className="btn-primary" onClick={() => handleOpenModal()}>
                         + Adicionar Documento
                     </button>
@@ -196,20 +226,27 @@ export default function Documentos({ userInfo }) {
                                 Ver Documento
                             </a>
                         )}
-                        {isCorretor && (
+                        {(isAdmin || isCorretor) && (
                             <div className="documento-actions">
-                                <button 
-                                    className="btn-edit"
-                                    onClick={() => handleOpenModal(documento)}
-                                >
-                                    Editar
-                                </button>
-                                <button 
-                                    className="btn-danger btn-sm"
-                                    onClick={() => handleDelete(documento.id)}
-                                >
-                                    Excluir
-                                </button>
+                                {isAdmin && (
+                                    <>
+                                        <button 
+                                            className="btn-edit"
+                                            onClick={() => handleOpenModal(documento)}
+                                        >
+                                            Editar
+                                        </button>
+                                        <button 
+                                            className="btn-danger btn-sm"
+                                            onClick={() => handleDelete(documento.id)}
+                                        >
+                                            Excluir
+                                        </button>
+                                    </>
+                                )}
+                                {isCorretor && !isAdmin && (
+                                    <span className="text-muted">Apenas consulta</span>
+                                )}
                             </div>
                         )}
                     </div>

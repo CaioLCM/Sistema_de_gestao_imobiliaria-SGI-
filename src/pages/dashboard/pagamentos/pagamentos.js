@@ -92,7 +92,6 @@ export default function Pagamentos({ userInfo }) {
     const loadPagamentos = useCallback(async () => {
         try {
             setLoading(true)
-            // Cliente e Corretor podem consultar pagamentos
             let pagamentosQuery = pagamentosCollection
 
             const snapshot = await getDocs(pagamentosQuery)
@@ -100,6 +99,19 @@ export default function Pagamentos({ userInfo }) {
                 id: doc.id,
                 ...doc.data()
             }))
+
+            // Filtrar por cliente: clientes só veem pagamentos associados a eles
+            if (!isAdmin && !isCorretor) {
+                const clienteId = userInfo?.uid || userInfo?.id
+                pagamentosList = pagamentosList.filter(p => 
+                    p.clienteInquilinoComprador === clienteId || 
+                    p.clienteProprietario === clienteId ||
+                    p.clienteInquilinoComprador === userInfo?.id ||
+                    p.clienteProprietario === userInfo?.id ||
+                    p.clienteId === clienteId ||
+                    p.clienteId === userInfo?.id
+                )
+            }
 
             // Buscar informações dos imóveis/contratos relacionados
             const imoveisSnapshot = await getDocs(imoveisCollection)
@@ -147,7 +159,7 @@ export default function Pagamentos({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [isAdmin, isCorretor, userInfo])
 
     useEffect(() => {
         loadImoveis()
@@ -343,7 +355,7 @@ export default function Pagamentos({ userInfo }) {
                             <th>Forma de Pagamento</th>
                             <th>Status</th>
                             <th>Observações</th>
-                            {isAdmin && <th>Ações</th>}
+                            {(isAdmin || isCorretor) && <th>Ações</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -373,20 +385,27 @@ export default function Pagamentos({ userInfo }) {
                                     </span>
                                 </td>
                                 <td>{pagamento.observacoes || pagamento.descricao || '-'}</td>
-                                {isAdmin && (
+                                {(isAdmin || isCorretor) && (
                                     <td>
-                                        <button 
-                                            className="btn-edit btn-sm"
-                                            onClick={() => handleOpenModal(pagamento)}
-                                        >
-                                            Editar
-                                        </button>
-                                        <button 
-                                            className="btn-danger btn-sm"
-                                            onClick={() => handleDelete(pagamento.id)}
-                                        >
-                                            Excluir
-                                        </button>
+                                        {isAdmin && (
+                                            <>
+                                                <button 
+                                                    className="btn-edit btn-sm"
+                                                    onClick={() => handleOpenModal(pagamento)}
+                                                >
+                                                    Editar
+                                                </button>
+                                                <button 
+                                                    className="btn-danger btn-sm"
+                                                    onClick={() => handleDelete(pagamento.id)}
+                                                >
+                                                    Excluir
+                                                </button>
+                                            </>
+                                        )}
+                                        {isCorretor && !isAdmin && (
+                                            <span className="text-muted">Apenas consulta</span>
+                                        )}
                                     </td>
                                 )}
                             </tr>

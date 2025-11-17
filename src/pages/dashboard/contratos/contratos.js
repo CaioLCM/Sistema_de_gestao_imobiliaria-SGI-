@@ -103,6 +103,17 @@ export default function Contratos({ userInfo }) {
                 ...doc.data()
             }))
 
+            // Filtrar por cliente: clientes só veem contratos associados a eles
+            if (!isAdmin && !isCorretor) {
+                const clienteId = userInfo?.uid || userInfo?.id
+                contratosList = contratosList.filter(c => 
+                    c.clienteInquilinoComprador === clienteId || 
+                    c.clienteProprietario === clienteId ||
+                    c.clienteInquilinoComprador === userInfo?.id ||
+                    c.clienteProprietario === userInfo?.id
+                )
+            }
+
             // Buscar informações dos imóveis relacionados
             const imoveisSnapshot = await getDocs(imoveisCollection)
             const allImoveis = imoveisSnapshot.docs.map(doc => ({
@@ -164,7 +175,7 @@ export default function Contratos({ userInfo }) {
         } finally {
             setLoading(false)
         }
-    }, [filtros])
+    }, [filtros, isAdmin, isCorretor, userInfo])
 
     useEffect(() => {
         loadImoveis()
@@ -256,9 +267,19 @@ export default function Contratos({ userInfo }) {
             }
 
             if (editingContrato) {
+                // Apenas Admin pode editar
+                if (!isAdmin) {
+                    setAlert('Apenas administradores podem editar contratos')
+                    return
+                }
                 await updateDoc(doc(db, 'contratos', editingContrato.id), contratoData)
                 setAlert('Contrato atualizado com sucesso!')
             } else {
+                // Admin e Corretor podem cadastrar
+                if (!isAdmin && !isCorretor) {
+                    setAlert('Apenas administradores e corretores podem cadastrar contratos')
+                    return
+                }
                 contratoData.createdAt = serverTimestamp()
                 await addDoc(contratosCollection, contratoData)
                 setAlert('Contrato criado com sucesso!')
@@ -471,19 +492,24 @@ export default function Contratos({ userInfo }) {
                                 </td>
                                 {(isAdmin || isCorretor) && (
                                     <td>
-                                        <button 
-                                            className="btn-edit btn-sm"
-                                            onClick={() => handleOpenModal(contrato)}
-                                        >
-                                            Editar
-                                        </button>
                                         {isAdmin && (
-                                            <button 
-                                                className="btn-danger btn-sm"
-                                                onClick={() => handleDelete(contrato.id)}
-                                            >
-                                                Excluir
-                                            </button>
+                                            <>
+                                                <button 
+                                                    className="btn-edit btn-sm"
+                                                    onClick={() => handleOpenModal(contrato)}
+                                                >
+                                                    Editar
+                                                </button>
+                                                <button 
+                                                    className="btn-danger btn-sm"
+                                                    onClick={() => handleDelete(contrato.id)}
+                                                >
+                                                    Excluir
+                                                </button>
+                                            </>
+                                        )}
+                                        {isCorretor && !isAdmin && (
+                                            <span className="text-muted">Apenas consulta</span>
                                         )}
                                     </td>
                                 )}

@@ -168,6 +168,12 @@
     border: 1px solid #fc8181;
 }
 
+.text-muted {
+    color: #999;
+    font-size: 12px;
+    font-style: italic;
+}
+
 .empty-state {
     text-align: center;
     padding: 60px 20px;
