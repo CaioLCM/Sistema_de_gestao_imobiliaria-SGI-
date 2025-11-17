@@ -8,6 +8,8 @@ export default function Usuarios({ userInfo }) {
     const [usuarios, setUsuarios] = useState([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
+    const [modalMode, setModalMode] = useState('create')
+    const [editingUser, setEditingUser] = useState(null)
     const [formData, setFormData] = useState({
         nome: '',
         email: '',
@@ -43,6 +45,49 @@ export default function Usuarios({ userInfo }) {
         }
     }
 
+    const formatCpf = (value = '') => {
+        const digits = value.replace(/\D/g, '').slice(0, 11)
+        let formatted = digits
+
+        if (digits.length > 3 && digits.length <= 6) {
+            formatted = `${digits.slice(0, 3)}.${digits.slice(3)}`
+        } else if (digits.length > 6 && digits.length <= 9) {
+            formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+        } else if (digits.length > 9) {
+            formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+        }
+
+        return formatted
+    }
+
+    function openCreateModal() {
+        setModalMode('create')
+        setEditingUser(null)
+        setFormData({
+            nome: '',
+            email: '',
+            senha: '',
+            cpf: '',
+            telefone: '',
+            tipoConta: 'cliente'
+        })
+        setShowModal(true)
+    }
+
+    function openEditModal(usuario) {
+        setModalMode('edit')
+        setEditingUser(usuario)
+        setFormData({
+            nome: usuario.nome || '',
+            email: usuario.email || '',
+            senha: '',
+            cpf: formatCpf(usuario.cpf || ''),
+            telefone: usuario.telefone || '',
+            tipoConta: usuario.tipoConta || 'cliente'
+        })
+        setShowModal(true)
+    }
+
     async function handleCreateUser(e) {
         e.preventDefault()
         setAlert('')
@@ -63,7 +108,7 @@ export default function Usuarios({ userInfo }) {
                 uid: newUserId,
                 email: formData.email,
                 nome: formData.nome,
-                cpf: formData.cpf,
+                cpf: formatCpf(formData.cpf),
                 telefone: formData.telefone,
                 tipoConta: formData.tipoConta,
                 createdAt: serverTimestamp()
@@ -103,6 +148,46 @@ export default function Usuarios({ userInfo }) {
         }
     }
 
+    async function handleUpdateUser(e) {
+        e.preventDefault()
+        if (!editingUser) return
+
+        setAlert('')
+        setCreating(true)
+
+        try {
+            const payload = {
+                nome: formData.nome,
+                email: formData.email,
+                cpf: formatCpf(formData.cpf),
+                telefone: formData.telefone,
+                tipoConta: formData.tipoConta,
+                updatedAt: serverTimestamp()
+            }
+
+            await setDoc(doc(db, 'user_info', editingUser.id), payload, { merge: true })
+
+            setAlert('Conta atualizada com sucesso!')
+            setShowModal(false)
+            setEditingUser(null)
+            setModalMode('create')
+            loadUsuarios()
+        } catch (err) {
+            console.error('Erro ao atualizar usuário:', err)
+            setAlert('Erro ao atualizar usuário')
+        } finally {
+            setCreating(false)
+        }
+    }
+
+    function handleSubmit(e) {
+        if (modalMode === 'edit') {
+            handleUpdateUser(e)
+        } else {
+            handleCreateUser(e)
+        }
+    }
+
     async function handleDeleteUser(userId) {
         if (!window.confirm('Tem certeza que deseja excluir esta conta?')) {
             return
@@ -138,7 +223,7 @@ export default function Usuarios({ userInfo }) {
         <div className="usuarios-container">
             <div className="usuarios-header">
                 <h1>Gerenciamento de Contas</h1>
-                <button className="btn-primary" onClick={() => setShowModal(true)}>
+                <button className="btn-primary" onClick={openCreateModal}>
                     + Criar Nova Conta
                 </button>
             </div>
@@ -192,6 +277,12 @@ export default function Usuarios({ userInfo }) {
                                     </td>
                                     <td>
                                         <button 
+                                            className="btn-secondary btn-sm"
+                                            onClick={() => openEditModal(usuario)}
+                                        >
+                                            Editar
+                                        </button>
+                                        <button 
                                             className="btn-danger btn-sm"
                                             onClick={() => handleDeleteUser(usuario.id)}
                                             disabled={disableDelete}
@@ -210,10 +301,10 @@ export default function Usuarios({ userInfo }) {
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2>Criar Nova Conta</h2>
+                            <h2>{modalMode === 'edit' ? 'Editar Conta' : 'Criar Nova Conta'}</h2>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
                         </div>
-                        <form onSubmit={handleCreateUser} className="modal-form">
+                        <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
                                 <label>Nome Completo *</label>
                                 <input
@@ -232,22 +323,25 @@ export default function Usuarios({ userInfo }) {
                                     required
                                 />
                             </div>
-                            <div className="form-group">
-                                <label>Senha *</label>
-                                <input
-                                    type="password"
-                                    value={formData.senha}
-                                    onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                                    required
-                                    minLength={6}
-                                />
-                            </div>
+                            {modalMode === 'create' && (
+                                <div className="form-group">
+                                    <label>Senha *</label>
+                                    <input
+                                        type="password"
+                                        value={formData.senha}
+                                        onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                                        required
+                                        minLength={6}
+                                    />
+                                </div>
+                            )}
                             <div className="form-group">
                                 <label>CPF/CNPJ</label>
                                 <input
                                     type="text"
                                     value={formData.cpf}
-                                    onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+                                    onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
+                                    placeholder="000.000.000-00"
                                 />
                             </div>
                             <div className="form-group">
@@ -267,6 +361,7 @@ export default function Usuarios({ userInfo }) {
                                 >
                                     <option value="cliente">Cliente</option>
                                     <option value="corretor">Corretor</option>
+                                    <option value="adm">Administrador</option>
                                 </select>
                             </div>
                             <div className="modal-actions">
@@ -274,7 +369,7 @@ export default function Usuarios({ userInfo }) {
                                     Cancelar
                                 </button>
                                 <button type="submit" className="btn-primary" disabled={creating}>
-                                    {creating ? 'Criando...' : 'Criar Conta'}
+                                    {creating ? 'Salvando...' : modalMode === 'edit' ? 'Salvar Alterações' : 'Criar Conta'}
                                 </button>
                             </div>
                         </form>
