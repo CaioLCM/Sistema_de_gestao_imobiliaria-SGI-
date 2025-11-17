@@ -66,6 +66,13 @@
     margin: 0 0 12px 0;
 }
 
+.documento-cliente {
+    color: #4a5568;
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0 0 12px 0;
+}
+
 .documento-descricao {
     color: #4a5568;
     font-size: 14px;

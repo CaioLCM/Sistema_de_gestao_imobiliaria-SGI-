@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { documentosCollection, db, imoveisCollection } from '../../../firebase'
+import { documentosCollection, db, imoveisCollection, userInfoCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './documentos.css'
 
 export default function Documentos({ userInfo }) {
     const [documentos, setDocumentos] = useState([])
     const [imoveis, setImoveis] = useState([])
+    const [clientes, setClientes] = useState([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingDocumento, setEditingDocumento] = useState(null)
@@ -14,12 +15,32 @@ export default function Documentos({ userInfo }) {
         tipo: '',
         nome: '',
         descricao: '',
-        url: ''
+        url: '',
+        clienteVinculado: ''
     })
     const [alert, setAlert] = useState('')
 
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
+
+    // Carregar lista de clientes
+    const loadClientes = useCallback(async () => {
+        try {
+            const snapshot = await getDocs(userInfoCollection)
+            const clientesList = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+                .filter(user => {
+                    const tipo = (user.tipoConta || '').toString().toLowerCase()
+                    return tipo.includes('cliente') || (!tipo.includes('adm') && !tipo.includes('corretor'))
+                })
+            setClientes(clientesList)
+        } catch (err) {
+            console.error('Erro ao carregar clientes:', err)
+        }
+    }, [])
 
     const loadImoveis = useCallback(async () => {
         try {
@@ -49,30 +70,39 @@ export default function Documentos({ userInfo }) {
                 ...doc.data()
             }))
 
-            // Filtrar por cliente: clientes só veem documentos associados a eles
+            // Filtrar por cliente: clientes só veem documentos vinculados a eles
             if (!isAdmin && !isCorretor) {
                 const clienteId = userInfo?.uid || userInfo?.id
-                // Filtrar documentos por imóvel do cliente ou clienteId direto
+                // Filtrar documentos onde o cliente é o clienteVinculado
                 documentosList = documentosList.filter(d => {
-                    // Verificar se o documento está vinculado a um imóvel do cliente
-                    const imovel = imoveisList.find(i => i.id === d.imovelId)
-                    if (imovel) {
-                        return imovel.clienteProprietario === clienteId || 
-                               imovel.clienteProprietario === userInfo?.id ||
-                               imovel.clienteId === clienteId ||
-                               imovel.clienteId === userInfo?.id
-                    }
-                    // Verificar se o documento tem clienteId direto
-                    return d.clienteId === clienteId || d.clienteId === userInfo?.id
+                    return d.clienteVinculado === clienteId || 
+                           d.clienteVinculado === userInfo?.id ||
+                           d.clienteId === clienteId ||
+                           d.clienteId === userInfo?.id
                 })
             }
             
-            // Buscar dados dos imóveis
+            // Buscar informações dos clientes
+            const clientesSnapshot = await getDocs(userInfoCollection)
+            const allClientes = clientesSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }))
+
+            // Buscar dados dos imóveis e clientes vinculados
             const documentosCompleto = documentosList.map(documento => {
                 const imovel = imoveisList.find(i => i.id === documento.imovelId)
+                let clienteVinculadoInfo = null
+                if (documento.clienteVinculado) {
+                    clienteVinculadoInfo = allClientes.find(c => 
+                        c.id === documento.clienteVinculado || 
+                        c.uid === documento.clienteVinculado
+                    )
+                }
                 return {
                     ...documento,
-                    imovel: imovel
+                    imovel: imovel,
+                    clienteVinculadoInfo: clienteVinculadoInfo
                 }
             })
 
@@ -87,7 +117,8 @@ export default function Documentos({ userInfo }) {
 
     useEffect(() => {
         loadImoveis()
-    }, [loadImoveis])
+        loadClientes()
+    }, [loadImoveis, loadClientes])
 
     useEffect(() => {
         if (imoveis.length >= 0) {
@@ -104,7 +135,8 @@ export default function Documentos({ userInfo }) {
                 tipo: documento.tipo || '',
                 nome: documento.nome || '',
                 descricao: documento.descricao || '',
-                url: documento.url || ''
+                url: documento.url || '',
+                clienteVinculado: documento.clienteVinculado || documento.clienteId || ''
             })
         } else {
             setEditingDocumento(null)
@@ -113,7 +145,8 @@ export default function Documentos({ userInfo }) {
                 tipo: '',
                 nome: '',
                 descricao: '',
-                url: ''
+                url: '',
+                clienteVinculado: ''
             })
         }
         setShowModal(true)
@@ -126,7 +159,12 @@ export default function Documentos({ userInfo }) {
 
         try {
             const documentoData = {
-                ...formData,
+                imovelId: formData.imovelId || null,
+                tipo: formData.tipo,
+                nome: formData.nome,
+                descricao: formData.descricao || null,
+                url: formData.url || null,
+                clienteVinculado: formData.clienteVinculado || null,
                 updatedAt: serverTimestamp()
             }
 
@@ -210,9 +248,16 @@ export default function Documentos({ userInfo }) {
                             <h3>{documento.nome}</h3>
                             <span className="documento-tipo">{documento.tipo}</span>
                         </div>
-                        <p className="documento-imovel">
-                            {documento.imovel?.endereco || 'Imóvel não encontrado'}
-                        </p>
+                        {documento.imovel?.endereco && (
+                            <p className="documento-imovel">
+                                Imóvel: {documento.imovel.endereco}
+                            </p>
+                        )}
+                        {documento.clienteVinculadoInfo && (
+                            <p className="documento-cliente">
+                                Cliente: {documento.clienteVinculadoInfo.nome || documento.clienteVinculadoInfo.name || documento.clienteVinculadoInfo.email}
+                            </p>
+                        )}
                         {documento.descricao && (
                             <p className="documento-descricao">{documento.descricao}</p>
                         )}
@@ -268,16 +313,15 @@ export default function Documentos({ userInfo }) {
                         </div>
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
-                                <label>Imóvel *</label>
+                                <label>Imóvel</label>
                                 <select
                                     value={formData.imovelId}
                                     onChange={(e) => setFormData({ ...formData, imovelId: e.target.value })}
-                                    required
                                 >
-                                    <option value="">Selecione um imóvel</option>
+                                    <option value="">Selecione um imóvel (opcional)</option>
                                     {imoveis.map(imovel => (
                                         <option key={imovel.id} value={imovel.id}>
-                                            {imovel.endereco} - {imovel.cidade}
+                                            {imovel.endereco}
                                         </option>
                                     ))}
                                 </select>
@@ -306,6 +350,21 @@ export default function Documentos({ userInfo }) {
                                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                                     required
                                 />
+                            </div>
+                            <div className="form-group">
+                                <label>Cliente Vinculado</label>
+                                <select
+                                    value={formData.clienteVinculado}
+                                    onChange={(e) => setFormData({ ...formData, clienteVinculado: e.target.value })}
+                                >
+                                    <option value="">Selecione um cliente (opcional)</option>
+                                    {clientes.map(cliente => (
+                                        <option key={cliente.id} value={cliente.id}>
+                                            {cliente.nome || cliente.name || cliente.email} {cliente.email ? `(${cliente.email})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                <small>Selecione um cliente para que apenas ele tenha acesso a este documento</small>
                             </div>
                             <div className="form-group">
                                 <label>URL do Documento</label>
