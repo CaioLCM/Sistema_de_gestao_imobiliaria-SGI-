@@ -27,3 +27,4 @@ export const userInfoCollection = collection(db, 'user_info');
 export const imoveisCollection = collection(db, 'imoveis');
 export const pagamentosCollection = collection(db, 'pagamentos');
 export const documentosCollection = collection(db, 'documentos');
+export const contratosCollection = collection(db, 'contratos');

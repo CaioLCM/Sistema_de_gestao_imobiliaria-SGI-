@@ -9,6 +9,7 @@ import "./menu.css"
 import Imoveis from './imoveis/imoveis'
 import Pagamentos from './pagamentos/pagamentos'
 import Documentos from './documentos/documentos'
+import Contratos from './contratos/contratos'
 import Usuarios from './usuarios/usuarios'
 
 export default function Dashboard() {
@@ -98,6 +99,8 @@ export default function Dashboard() {
                 return <Pagamentos userInfo={userInfo} canEdit={canEdit} />
             case "documentos":
                 return <Documentos userInfo={userInfo} canEdit={canEdit} />
+            case "contratos":
+                return <Contratos userInfo={userInfo} />
             case "contas":
                 return <Usuarios userInfo={userInfo} canCreateAccounts={isAdmin} />
             default:
@@ -154,14 +157,18 @@ export default function Dashboard() {
                     >
                         <span>📄</span> Documentos
                     </button>
-                    {isAdmin && (
-                        <button 
-                            className={`nav-item ${aba === "contas" ? 'active' : ''}`}
-                            onClick={() => setAba("contas")}
-                        >
-                            <span>👥</span> Contas
-                        </button>
-                    )}
+                    <button 
+                        className={`nav-item ${aba === "contratos" ? 'active' : ''}`}
+                        onClick={() => setAba("contratos")}
+                    >
+                        <span>📋</span> Contratos
+                    </button>
+                    <button 
+                        className={`nav-item ${aba === "contas" ? 'active' : ''}`}
+                        onClick={() => setAba("contas")}
+                    >
+                        <span>👥</span> {isAdmin ? 'Contas' : 'Meu Cadastro'}
+                    </button>
                 </nav>
                 <div className="sidebar-footer">
                     <button className="logout-button" onClick={handleLogout}>

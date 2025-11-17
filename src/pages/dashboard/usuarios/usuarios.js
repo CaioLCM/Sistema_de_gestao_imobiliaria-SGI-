@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { auth, db, userInfoCollection } from '../../../firebase'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { getDocs, doc, setDoc, serverTimestamp, deleteDoc } from 'firebase/firestore'
+import { getDocs, doc, setDoc, serverTimestamp, deleteDoc, getDoc } from 'firebase/firestore'
 import './usuarios.css'
 
 export default function Usuarios({ userInfo }) {
@@ -21,11 +21,18 @@ export default function Usuarios({ userInfo }) {
     const [alert, setAlert] = useState('')
     const [creating, setCreating] = useState(false)
 
+    const isAdmin = userInfo?.tipoConta === 'adm'
+
     useEffect(() => {
-        if (userInfo?.tipoConta !== 'adm') {
+        if (!userInfo) {
             return
         }
-        loadUsuarios()
+        if (userInfo?.tipoConta === 'adm') {
+            loadUsuarios()
+        } else {
+            loadOwnUser()
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userInfo])
 
     async function loadUsuarios() {
@@ -40,6 +47,28 @@ export default function Usuarios({ userInfo }) {
         } catch (err) {
             console.error('Erro ao carregar contas:', err)
             setAlert('Erro ao carregar contas')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function loadOwnUser() {
+        try {
+            setLoading(true)
+            if (!userInfo?.uid) {
+                setLoading(false)
+                return
+            }
+            const userDoc = await getDoc(doc(db, 'user_info', userInfo.uid))
+            if (userDoc.exists()) {
+                setUsuarios([{
+                    id: userDoc.id,
+                    ...userDoc.data()
+                }])
+            }
+        } catch (err) {
+            console.error('Erro ao carregar seu cadastro:', err)
+            setAlert('Erro ao carregar seu cadastro')
         } finally {
             setLoading(false)
         }
@@ -60,6 +89,21 @@ export default function Usuarios({ userInfo }) {
         return formatted
     }
 
+    const formatTelefone = (value = '') => {
+        const digits = value.replace(/\D/g, '').slice(0, 11)
+        let formatted = digits
+
+        if (digits.length <= 2) {
+            formatted = digits
+        } else if (digits.length <= 7) {
+            formatted = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+        } else {
+            formatted = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+        }
+
+        return formatted
+    }
+
     function openCreateModal() {
         setModalMode('create')
         setEditingUser(null)
@@ -75,6 +119,12 @@ export default function Usuarios({ userInfo }) {
     }
 
     function openEditModal(usuario) {
+        // Garantir que apenas o próprio usuário possa ser editado (exceto admins)
+        if (!isAdmin && usuario.uid !== userInfo?.uid && usuario.id !== userInfo?.uid) {
+            setAlert('Você só pode editar seu próprio cadastro')
+            return
+        }
+
         setModalMode('edit')
         setEditingUser(usuario)
         setFormData({
@@ -82,7 +132,7 @@ export default function Usuarios({ userInfo }) {
             email: usuario.email || '',
             senha: '',
             cpf: formatCpf(usuario.cpf || ''),
-            telefone: usuario.telefone || '',
+            telefone: formatTelefone(usuario.telefone || ''),
             tipoConta: usuario.tipoConta || 'cliente'
         })
         setShowModal(true)
@@ -109,7 +159,7 @@ export default function Usuarios({ userInfo }) {
                 email: formData.email,
                 nome: formData.nome,
                 cpf: formatCpf(formData.cpf),
-                telefone: formData.telefone,
+                telefone: formData.telefone.replace(/\D/g, ''), // Salvar apenas números
                 tipoConta: formData.tipoConta,
                 createdAt: serverTimestamp()
             }
@@ -152,6 +202,13 @@ export default function Usuarios({ userInfo }) {
         e.preventDefault()
         if (!editingUser) return
 
+        // Validação de segurança: garantir que apenas o próprio usuário possa ser editado (exceto admins)
+        if (!isAdmin && editingUser.uid !== userInfo?.uid && editingUser.id !== userInfo?.uid) {
+            setAlert('Você só pode editar seu próprio cadastro')
+            setShowModal(false)
+            return
+        }
+
         setAlert('')
         setCreating(true)
 
@@ -160,9 +217,13 @@ export default function Usuarios({ userInfo }) {
                 nome: formData.nome,
                 email: formData.email,
                 cpf: formatCpf(formData.cpf),
-                telefone: formData.telefone,
-                tipoConta: formData.tipoConta,
+                telefone: formData.telefone.replace(/\D/g, ''), // Salvar apenas números
                 updatedAt: serverTimestamp()
+            }
+
+            // Apenas admins podem alterar o tipoConta
+            if (isAdmin) {
+                payload.tipoConta = formData.tipoConta
             }
 
             await setDoc(doc(db, 'user_info', editingUser.id), payload, { merge: true })
@@ -171,7 +232,11 @@ export default function Usuarios({ userInfo }) {
             setShowModal(false)
             setEditingUser(null)
             setModalMode('create')
-            loadUsuarios()
+            if (isAdmin) {
+                loadUsuarios()
+            } else {
+                loadOwnUser()
+            }
         } catch (err) {
             console.error('Erro ao atualizar usuário:', err)
             setAlert('Erro ao atualizar usuário')
@@ -203,13 +268,6 @@ export default function Usuarios({ userInfo }) {
         }
     }
 
-    if (userInfo?.tipoConta !== 'adm') {
-        return (
-            <div className="usuarios-container">
-                <div className="alert-error">Acesso negado. Apenas administradores podem acessar esta página.</div>
-            </div>
-        )
-    }
 
     if (loading) {
         return (
@@ -222,10 +280,12 @@ export default function Usuarios({ userInfo }) {
     return (
         <div className="usuarios-container">
             <div className="usuarios-header">
-                <h1>Gerenciamento de Contas</h1>
-                <button className="btn-primary" onClick={openCreateModal}>
-                    + Criar Nova Conta
-                </button>
+                <h1>{isAdmin ? 'Gerenciamento de Contas' : 'Meu Cadastro'}</h1>
+                {isAdmin && (
+                    <button className="btn-primary" onClick={openCreateModal}>
+                        + Criar Nova Conta
+                    </button>
+                )}
             </div>
 
             {alert && (
@@ -250,7 +310,7 @@ export default function Usuarios({ userInfo }) {
                         {usuarios.map(usuario => {
                             const nome = usuario.nome || usuario.name || usuario.email || '-'
                             const cpf = usuario.cpf || '-'
-                            const telefone = usuario.telefone || '-'
+                            const telefone = usuario.telefone ? formatTelefone(usuario.telefone) : '-'
                             const rawTipo = (usuario.tipoConta || '').toString().toLowerCase()
                             let tipoKey = 'cliente'
                             let tipoLabel = 'Cliente'
@@ -282,13 +342,15 @@ export default function Usuarios({ userInfo }) {
                                         >
                                             Editar
                                         </button>
-                                        <button 
-                                            className="btn-danger btn-sm"
-                                            onClick={() => handleDeleteUser(usuario.id)}
-                                            disabled={disableDelete}
-                                        >
-                                            Excluir
-                                        </button>
+                                        {isAdmin && (
+                                            <button 
+                                                className="btn-danger btn-sm"
+                                                onClick={() => handleDeleteUser(usuario.id)}
+                                                disabled={disableDelete}
+                                            >
+                                                Excluir
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             )
@@ -349,21 +411,24 @@ export default function Usuarios({ userInfo }) {
                                 <input
                                     type="text"
                                     value={formData.telefone}
-                                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                                    onChange={(e) => setFormData({ ...formData, telefone: formatTelefone(e.target.value) })}
+                                    placeholder="(00) 00000-0000"
                                 />
                             </div>
-                            <div className="form-group">
-                                <label>Tipo de Conta *</label>
-                                <select
-                                    value={formData.tipoConta}
-                                    onChange={(e) => setFormData({ ...formData, tipoConta: e.target.value })}
-                                    required
-                                >
-                                    <option value="cliente">Cliente</option>
-                                    <option value="corretor">Corretor</option>
-                                    <option value="adm">Administrador</option>
-                                </select>
-                            </div>
+                            {isAdmin && (
+                                <div className="form-group">
+                                    <label>Tipo de Conta *</label>
+                                    <select
+                                        value={formData.tipoConta}
+                                        onChange={(e) => setFormData({ ...formData, tipoConta: e.target.value })}
+                                        required
+                                    >
+                                        <option value="cliente">Cliente</option>
+                                        <option value="corretor">Corretor</option>
+                                        <option value="adm">Administrador</option>
+                                    </select>
+                                </div>
+                            )}
                             <div className="modal-actions">
                                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                                     Cancelar
