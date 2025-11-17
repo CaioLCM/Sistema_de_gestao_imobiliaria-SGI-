@@ -168,6 +168,11 @@ export default function Pagamentos({ userInfo }) {
     }, [loadImoveis, loadClientes, loadPagamentos])
 
     function handleOpenModal(pagamento = null) {
+        // Se está tentando editar e não é admin, bloquear
+        if (pagamento && !isAdmin) {
+            setAlert('Apenas administradores podem editar pagamentos')
+            return
+        }
         if (pagamento) {
             setEditingPagamento(pagamento)
             setFormData({
