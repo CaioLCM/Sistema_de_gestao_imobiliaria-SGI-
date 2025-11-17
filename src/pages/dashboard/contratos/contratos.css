@@ -202,6 +202,12 @@
     border: 1px solid #f5c6cb;
 }
 
+.text-muted {
+    color: #999;
+    font-size: 12px;
+    font-style: italic;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
