@@ -184,6 +184,11 @@ export default function Contratos({ userInfo }) {
     }, [loadImoveis, loadClientes, loadContratos])
 
     function handleOpenModal(contrato = null) {
+        // Se está tentando editar e não é admin, bloquear
+        if (contrato && !isAdmin) {
+            setAlert('Apenas administradores podem editar contratos')
+            return
+        }
         if (contrato) {
             setEditingContrato(contrato)
             setFormData({

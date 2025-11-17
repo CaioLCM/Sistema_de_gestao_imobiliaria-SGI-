@@ -128,6 +128,11 @@ export default function Documentos({ userInfo }) {
     }, [imoveis])
 
     function handleOpenModal(documento = null) {
+        // Se está tentando editar e não é admin, bloquear
+        if (documento && !isAdmin) {
+            setAlert('Apenas administradores podem editar documentos')
+            return
+        }
         if (documento) {
             setEditingDocumento(documento)
             setFormData({
