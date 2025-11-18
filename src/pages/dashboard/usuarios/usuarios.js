@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
-// ADICIONADO: imports necessários para o truque do App Secundário
+// IMPORTS IMPORTANTES PARA A CORREÇÃO
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth, db, userInfoCollection } from '../../../firebase'
 import { getDocs, doc, setDoc, serverTimestamp, deleteDoc, getDoc } from 'firebase/firestore'
 import './usuarios.css'
 
-// Configuração do Firebase (precisamos dela aqui para criar o app secundário)
-// Copie exatamente a config do seu firebase.js
+// Configuração do Firebase (ESSENCIAL PARA O TRUQUE FUNCIONAR)
 const firebaseConfig = {
     apiKey: "AIzaSyCLflfAuTvsh4UTp9fTxDohvFNm9z6mFLE",
     authDomain: "sgii-db3f2.firebaseapp.com",
@@ -152,42 +151,39 @@ export default function Usuarios({ userInfo }) {
         setShowModal(true)
     }
 
+    // AQUI ESTÁ A MÁGICA DA CORREÇÃO
     async function handleCreateUser(e) {
         e.preventDefault()
         setAlert('')
         setCreating(true)
 
-        // TRUQUE: Criar um "App Secundário" para não deslogar o Admin atual
         let secondaryApp = null;
 
         try {
-            // 1. Inicializa uma nova instância do Firebase com nome "Secondary"
+            // 1. Cria uma "conexão fantasma" com o Firebase
             secondaryApp = initializeApp(firebaseConfig, "Secondary");
-            
-            // 2. Pega o Auth dessa instância secundária
             const secondaryAuth = getAuth(secondaryApp);
 
-            // 3. Cria o usuário usando o Auth secundário
-            // Isso NÃO afeta o `auth` principal onde o Admin está logado
+            // 2. Cria o usuário nessa conexão fantasma
+            // Isso impede que o SEU login de Admin caia
             const userCredential = await createUserWithEmailAndPassword(
                 secondaryAuth,
                 formData.email,
                 formData.senha
             )
 
-            // 4. Faz logout IMEDIATO do usuário novo na instância secundária (só pra garantir)
+            // 3. Desloga da conexão fantasma (limpeza)
             await signOut(secondaryAuth);
 
             const newUserId = userCredential.user.uid
 
-            // 5. Agora salvamos os dados no Firestore usando o `db` principal (onde somos Admin)
-            // Como somos Admin no app principal, temos permissão de escrita!
+            // 4. Salva os dados no banco usando a SUA conexão de Admin (db)
             const userPayload = {
                 uid: newUserId,
                 email: formData.email,
                 nome: formData.nome,
                 cpf: formatCpf(formData.cpf),
-                telefone: formData.telefone.replace(/\D/g, ''), // Salvar apenas números
+                telefone: formData.telefone.replace(/\D/g, ''), 
                 tipoConta: formData.tipoConta,
                 createdAt: serverTimestamp()
             }
@@ -204,8 +200,6 @@ export default function Usuarios({ userInfo }) {
                 tipoConta: 'cliente'
             })
             setShowModal(false)
-            
-            // Recarrega a lista usando o app principal
             loadUsuarios()
             
         } catch (err) {
@@ -219,13 +213,9 @@ export default function Usuarios({ userInfo }) {
             }
         } finally {
             setCreating(false)
-            // Limpeza: Deletar a instância secundária para liberar memória
+            // Tenta limpar a memória do app secundário, se possível
             if (secondaryApp) {
-                // O método 'delete' existe nas versões mais novas do Firebase App,
-                // mas se der erro, deixar o app lá não quebra nada imediatamente.
-                // Como estamos em React funcional, ele será recriado se necessário.
-                // Nota: em versões Web SDK v9+, não há deleteApp fácil importado aqui, 
-                // então deixamos o Garbage Collector cuidar ou reutilizamos o nome.
+               // deleteApp(secondaryApp).catch(() => {}); // Opcional, depende da versão
             }
         }
     }
@@ -234,7 +224,6 @@ export default function Usuarios({ userInfo }) {
         e.preventDefault()
         if (!editingUser) return
 
-        // Validação de segurança: garantir que apenas o próprio usuário possa ser editado (exceto admins)
         if (!isAdmin && editingUser.uid !== userInfo?.uid && editingUser.id !== userInfo?.uid) {
             setAlert('Você só pode editar seu próprio cadastro')
             setShowModal(false)
@@ -249,11 +238,10 @@ export default function Usuarios({ userInfo }) {
                 nome: formData.nome,
                 email: formData.email,
                 cpf: formatCpf(formData.cpf),
-                telefone: formData.telefone.replace(/\D/g, ''), // Salvar apenas números
+                telefone: formData.telefone.replace(/\D/g, ''), 
                 updatedAt: serverTimestamp()
             }
 
-            // Apenas admins podem alterar o tipoConta
             if (isAdmin) {
                 payload.tipoConta = formData.tipoConta
             }
