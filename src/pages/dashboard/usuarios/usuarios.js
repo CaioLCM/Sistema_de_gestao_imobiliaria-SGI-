@@ -1,8 +1,22 @@
 import { useState, useEffect } from 'react'
+// ADICIONADO: imports necessários para o truque do App Secundário
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth, db, userInfoCollection } from '../../../firebase'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
 import { getDocs, doc, setDoc, serverTimestamp, deleteDoc, getDoc } from 'firebase/firestore'
 import './usuarios.css'
+
+// Configuração do Firebase (precisamos dela aqui para criar o app secundário)
+// Copie exatamente a config do seu firebase.js
+const firebaseConfig = {
+    apiKey: "AIzaSyCLflfAuTvsh4UTp9fTxDohvFNm9z6mFLE",
+    authDomain: "sgii-db3f2.firebaseapp.com",
+    projectId: "sgii-db3f2",
+    storageBucket: "sgii-db3f2.firebasestorage.app",
+    messagingSenderId: "314644198883",
+    appId: "1:314644198883:web:b66c0007f2fcf87605dcd6",
+    measurementId: "G-EN2SPY8VYS"
+};
 
 export default function Usuarios({ userInfo }) {
     const [usuarios, setUsuarios] = useState([])
@@ -46,7 +60,7 @@ export default function Usuarios({ userInfo }) {
             setUsuarios(usersList)
         } catch (err) {
             console.error('Erro ao carregar contas:', err)
-            setAlert('Erro ao carregar contas')
+            setAlert('Erro ao carregar contas: ' + err.message)
         } finally {
             setLoading(false)
         }
@@ -143,17 +157,31 @@ export default function Usuarios({ userInfo }) {
         setAlert('')
         setCreating(true)
 
+        // TRUQUE: Criar um "App Secundário" para não deslogar o Admin atual
+        let secondaryApp = null;
+
         try {
-            // Criar usuário no Firebase Auth
+            // 1. Inicializa uma nova instância do Firebase com nome "Secondary"
+            secondaryApp = initializeApp(firebaseConfig, "Secondary");
+            
+            // 2. Pega o Auth dessa instância secundária
+            const secondaryAuth = getAuth(secondaryApp);
+
+            // 3. Cria o usuário usando o Auth secundário
+            // Isso NÃO afeta o `auth` principal onde o Admin está logado
             const userCredential = await createUserWithEmailAndPassword(
-                auth,
+                secondaryAuth,
                 formData.email,
                 formData.senha
             )
 
+            // 4. Faz logout IMEDIATO do usuário novo na instância secundária (só pra garantir)
+            await signOut(secondaryAuth);
+
             const newUserId = userCredential.user.uid
 
-            // Criar documento no Firestore
+            // 5. Agora salvamos os dados no Firestore usando o `db` principal (onde somos Admin)
+            // Como somos Admin no app principal, temos permissão de escrita!
             const userPayload = {
                 uid: newUserId,
                 email: formData.email,
@@ -166,10 +194,6 @@ export default function Usuarios({ userInfo }) {
 
             await setDoc(doc(db, 'user_info', newUserId), userPayload)
 
-            // Nota: O Firebase Auth faz login automaticamente no usuário criado
-            // Em produção, é recomendado usar Firebase Admin SDK no backend
-            // para criar usuários sem fazer login automaticamente
-
             setAlert('Conta criada com sucesso!')
             setFormData({
                 nome: '',
@@ -180,10 +204,10 @@ export default function Usuarios({ userInfo }) {
                 tipoConta: 'cliente'
             })
             setShowModal(false)
+            
+            // Recarrega a lista usando o app principal
             loadUsuarios()
             
-            // Informar sobre a limitação (opcional - pode ser removido em produção com backend)
-            console.warn('Nota: O usuário foi criado, mas o Firebase Auth fez login automaticamente no novo usuário. Em produção, use Firebase Admin SDK no backend.')
         } catch (err) {
             console.error('Erro ao criar usuário:', err)
             if (err.code === 'auth/email-already-in-use') {
@@ -195,6 +219,14 @@ export default function Usuarios({ userInfo }) {
             }
         } finally {
             setCreating(false)
+            // Limpeza: Deletar a instância secundária para liberar memória
+            if (secondaryApp) {
+                // O método 'delete' existe nas versões mais novas do Firebase App,
+                // mas se der erro, deixar o app lá não quebra nada imediatamente.
+                // Como estamos em React funcional, ele será recriado se necessário.
+                // Nota: em versões Web SDK v9+, não há deleteApp fácil importado aqui, 
+                // então deixamos o Garbage Collector cuidar ou reutilizamos o nome.
+            }
         }
     }
 

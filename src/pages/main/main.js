@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import './main.css'
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth'
-import { auth, userInfoCollection } from '../../firebase'
+// ATENÇÃO: Adicionei 'db' e 'doc' e 'getDoc' aos imports
+import { auth, db } from '../../firebase' 
+import { doc, getDoc } from 'firebase/firestore' 
 import { useNavigate } from 'react-router-dom'
-import { query, where, getDocs } from 'firebase/firestore'
 
 export default function Main() {
     const [email, setEmail] = useState('')
@@ -15,31 +16,31 @@ export default function Main() {
     useEffect(() => {
         const unsub = onAuthStateChanged(auth, async (user) => {
             if (user) {
-                const userInfo = await findUserByEmail(user.email)
-                if (userInfo) {
-                    navigate('/dashboard', { replace: true })
-                } else {
-                    // Se usuário não tem perfil, fazer logout
-                    await signOut(auth)
-                    setAlert('Conta não autorizada. Entre em contato com o administrador.')
+                // MUDANÇA AQUI: Em vez de buscar por e-mail (query), buscamos pelo ID (doc)
+                // Isso é compatível com as novas regras de segurança estritas.
+                try {
+                    const docRef = doc(db, 'user_info', user.uid)
+                    const docSnap = await getDoc(docRef)
+
+                    if (docSnap.exists()) {
+                        // Sucesso: Usuário tem perfil no banco
+                        navigate('/dashboard', { replace: true })
+                    } else {
+                        // Usuário logado no Auth, mas sem perfil no Firestore
+                        console.error("Usuário sem documento no Firestore")
+                        await signOut(auth)
+                        setAlert('Conta não autorizada ou sem perfil. Contate o administrador.')
+                    }
+                } catch (error) {
+                    console.error("Erro ao verificar permissões:", error)
+                    await signOut(auth) // Garante logout se der erro de permissão
+                    setAlert('Erro de permissão. Tente novamente.')
                 }
             }
         })
 
         return unsub
     }, [navigate])
-
-    async function findUserByEmail(emailToFind) {
-        try {
-            const q = query(userInfoCollection, where('email', '==', emailToFind))
-            const snapshot = await getDocs(q)
-            if (snapshot.empty) return null
-            return snapshot.docs[0].data()
-        } catch (err) {
-            console.error('Erro ao buscar usuário:', err)
-            return null
-        }
-    }
 
     async function handleLogin(e) {
         e?.preventDefault()
@@ -54,10 +55,11 @@ export default function Main() {
 
         try {
             await signInWithEmailAndPassword(auth, email, senha)
-            // O useEffect vai redirecionar automaticamente
+            // Não precisamos fazer nada aqui, o onAuthStateChanged (acima) vai detectar
+            // o login e fazer o redirecionamento automaticamente.
         } catch (err) {
             console.log('Erro no login', err)
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
                 setAlert('Email ou senha incorretos')
             } else if (err.code === 'auth/invalid-email') {
                 setAlert('Email inválido')
