@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
-// IMPORTS IMPORTANTES PARA A CORREÇÃO
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { auth, db, userInfoCollection } from '../../../firebase'
-import { getDocs, doc, setDoc, serverTimestamp, deleteDoc, getDoc } from 'firebase/firestore'
+import { auth, db, userInfoCollection, contratosCollection } from '../../../firebase'
+import { getDocs, doc, setDoc, serverTimestamp, deleteDoc, getDoc, query, where } from 'firebase/firestore'
 import './usuarios.css'
 
-// Configuração do Firebase (ESSENCIAL PARA O TRUQUE FUNCIONAR)
 const firebaseConfig = {
     apiKey: "AIzaSyCLflfAuTvsh4UTp9fTxDohvFNm9z6mFLE",
     authDomain: "sgii-db3f2.firebaseapp.com",
@@ -19,6 +17,8 @@ const firebaseConfig = {
 
 export default function Usuarios({ userInfo }) {
     const [usuarios, setUsuarios] = useState([])
+    const [filteredUsuarios, setFilteredUsuarios] = useState([]) // Estado para lista filtrada
+    const [searchTerm, setSearchTerm] = useState('') // Estado do termo de busca
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [modalMode, setModalMode] = useState('create')
@@ -37,16 +37,28 @@ export default function Usuarios({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
 
     useEffect(() => {
-        if (!userInfo) {
-            return
-        }
+        if (!userInfo) return
         if (userInfo?.tipoConta === 'adm') {
             loadUsuarios()
         } else {
             loadOwnUser()
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userInfo])
+
+    // Filtro de pesquisa [RFS04]
+    useEffect(() => {
+        if (!searchTerm) {
+            setFilteredUsuarios(usuarios)
+        } else {
+            const term = searchTerm.toLowerCase()
+            const filtered = usuarios.filter(user => 
+                (user.nome && user.nome.toLowerCase().includes(term)) ||
+                (user.email && user.email.toLowerCase().includes(term)) ||
+                (user.cpf && user.cpf.includes(term))
+            )
+            setFilteredUsuarios(filtered)
+        }
+    }, [searchTerm, usuarios])
 
     async function loadUsuarios() {
         try {
@@ -57,6 +69,7 @@ export default function Usuarios({ userInfo }) {
                 ...doc.data()
             }))
             setUsuarios(usersList)
+            setFilteredUsuarios(usersList)
         } catch (err) {
             console.error('Erro ao carregar contas:', err)
             setAlert('Erro ao carregar contas: ' + err.message)
@@ -74,10 +87,9 @@ export default function Usuarios({ userInfo }) {
             }
             const userDoc = await getDoc(doc(db, 'user_info', userInfo.uid))
             if (userDoc.exists()) {
-                setUsuarios([{
-                    id: userDoc.id,
-                    ...userDoc.data()
-                }])
+                const userData = [{ id: userDoc.id, ...userDoc.data() }]
+                setUsuarios(userData)
+                setFilteredUsuarios(userData)
             }
         } catch (err) {
             console.error('Erro ao carregar seu cadastro:', err)
@@ -90,54 +102,33 @@ export default function Usuarios({ userInfo }) {
     const formatCpf = (value = '') => {
         const digits = value.replace(/\D/g, '').slice(0, 11)
         let formatted = digits
-
-        if (digits.length > 3 && digits.length <= 6) {
-            formatted = `${digits.slice(0, 3)}.${digits.slice(3)}`
-        } else if (digits.length > 6 && digits.length <= 9) {
-            formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
-        } else if (digits.length > 9) {
-            formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
-        }
-
+        if (digits.length > 3 && digits.length <= 6) formatted = `${digits.slice(0, 3)}.${digits.slice(3)}`
+        else if (digits.length > 6 && digits.length <= 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+        else if (digits.length > 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
         return formatted
     }
 
     const formatTelefone = (value = '') => {
         const digits = value.replace(/\D/g, '').slice(0, 11)
         let formatted = digits
-
-        if (digits.length <= 2) {
-            formatted = digits
-        } else if (digits.length <= 7) {
-            formatted = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
-        } else {
-            formatted = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
-        }
-
+        if (digits.length <= 2) formatted = digits
+        else if (digits.length <= 7) formatted = `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+        else formatted = `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
         return formatted
     }
 
     function openCreateModal() {
         setModalMode('create')
         setEditingUser(null)
-        setFormData({
-            nome: '',
-            email: '',
-            senha: '',
-            cpf: '',
-            telefone: '',
-            tipoConta: 'cliente'
-        })
+        setFormData({ nome: '', email: '', senha: '', cpf: '', telefone: '', tipoConta: 'cliente' })
         setShowModal(true)
     }
 
     function openEditModal(usuario) {
-        // Garantir que apenas o próprio usuário possa ser editado (exceto admins)
         if (!isAdmin && usuario.uid !== userInfo?.uid && usuario.id !== userInfo?.uid) {
             setAlert('Você só pode editar seu próprio cadastro')
             return
         }
-
         setModalMode('edit')
         setEditingUser(usuario)
         setFormData({
@@ -151,33 +142,17 @@ export default function Usuarios({ userInfo }) {
         setShowModal(true)
     }
 
-    // AQUI ESTÁ A MÁGICA DA CORREÇÃO
     async function handleCreateUser(e) {
         e.preventDefault()
         setAlert('')
         setCreating(true)
-
         let secondaryApp = null;
-
         try {
-            // 1. Cria uma "conexão fantasma" com o Firebase
             secondaryApp = initializeApp(firebaseConfig, "Secondary");
             const secondaryAuth = getAuth(secondaryApp);
-
-            // 2. Cria o usuário nessa conexão fantasma
-            // Isso impede que o SEU login de Admin caia
-            const userCredential = await createUserWithEmailAndPassword(
-                secondaryAuth,
-                formData.email,
-                formData.senha
-            )
-
-            // 3. Desloga da conexão fantasma (limpeza)
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.senha)
             await signOut(secondaryAuth);
-
             const newUserId = userCredential.user.uid
-
-            // 4. Salva os dados no banco usando a SUA conexão de Admin (db)
             const userPayload = {
                 uid: newUserId,
                 email: formData.email,
@@ -187,52 +162,31 @@ export default function Usuarios({ userInfo }) {
                 tipoConta: formData.tipoConta,
                 createdAt: serverTimestamp()
             }
-
             await setDoc(doc(db, 'user_info', newUserId), userPayload)
-
             setAlert('Conta criada com sucesso!')
-            setFormData({
-                nome: '',
-                email: '',
-                senha: '',
-                cpf: '',
-                telefone: '',
-                tipoConta: 'cliente'
-            })
+            setFormData({ nome: '', email: '', senha: '', cpf: '', telefone: '', tipoConta: 'cliente' })
             setShowModal(false)
             loadUsuarios()
-            
         } catch (err) {
             console.error('Erro ao criar usuário:', err)
-            if (err.code === 'auth/email-already-in-use') {
-                setAlert('Este email já está em uso')
-            } else if (err.code === 'auth/weak-password') {
-                setAlert('A senha deve ter pelo menos 6 caracteres')
-            } else {
-                setAlert('Erro ao criar conta: ' + err.message)
-            }
+            if (err.code === 'auth/email-already-in-use') setAlert('Este email já está em uso')
+            else if (err.code === 'auth/weak-password') setAlert('A senha deve ter pelo menos 6 caracteres')
+            else setAlert('Erro ao criar conta: ' + err.message)
         } finally {
             setCreating(false)
-            // Tenta limpar a memória do app secundário, se possível
-            if (secondaryApp) {
-               // deleteApp(secondaryApp).catch(() => {}); // Opcional, depende da versão
-            }
         }
     }
 
     async function handleUpdateUser(e) {
         e.preventDefault()
         if (!editingUser) return
-
         if (!isAdmin && editingUser.uid !== userInfo?.uid && editingUser.id !== userInfo?.uid) {
             setAlert('Você só pode editar seu próprio cadastro')
             setShowModal(false)
             return
         }
-
         setAlert('')
         setCreating(true)
-
         try {
             const payload = {
                 nome: formData.nome,
@@ -241,22 +195,14 @@ export default function Usuarios({ userInfo }) {
                 telefone: formData.telefone.replace(/\D/g, ''), 
                 updatedAt: serverTimestamp()
             }
-
-            if (isAdmin) {
-                payload.tipoConta = formData.tipoConta
-            }
-
+            if (isAdmin) payload.tipoConta = formData.tipoConta
             await setDoc(doc(db, 'user_info', editingUser.id), payload, { merge: true })
-
             setAlert('Conta atualizada com sucesso!')
             setShowModal(false)
             setEditingUser(null)
             setModalMode('create')
-            if (isAdmin) {
-                loadUsuarios()
-            } else {
-                loadOwnUser()
-            }
+            if (isAdmin) loadUsuarios()
+            else loadOwnUser()
         } catch (err) {
             console.error('Erro ao atualizar usuário:', err)
             setAlert('Erro ao atualizar usuário')
@@ -266,19 +212,24 @@ export default function Usuarios({ userInfo }) {
     }
 
     function handleSubmit(e) {
-        if (modalMode === 'edit') {
-            handleUpdateUser(e)
-        } else {
-            handleCreateUser(e)
-        }
+        if (modalMode === 'edit') handleUpdateUser(e)
+        else handleCreateUser(e)
     }
 
     async function handleDeleteUser(userId) {
-        if (!window.confirm('Tem certeza que deseja excluir esta conta?')) {
-            return
-        }
+        if (!window.confirm('Tem certeza que deseja excluir esta conta?')) return
 
         try {
+            const q1 = query(contratosCollection, where('clienteInquilinoComprador', '==', userId), where('statusContrato', '==', 'ativo'))
+            const q2 = query(contratosCollection, where('clienteProprietario', '==', userId), where('statusContrato', '==', 'ativo'))
+            
+            const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)])
+
+            if (!snap1.empty || !snap2.empty) {
+                setAlert('Não é possível excluir: O usuário possui contratos ativos vinculados.')
+                return
+            }
+
             await deleteDoc(doc(db, 'user_info', userId))
             setAlert('Conta excluída com sucesso!')
             loadUsuarios()
@@ -288,29 +239,31 @@ export default function Usuarios({ userInfo }) {
         }
     }
 
-
-    if (loading) {
-        return (
-            <div className="usuarios-container">
-                <div className="loading">Carregando contas...</div>
-            </div>
-        )
-    }
+    if (loading) return <div className="usuarios-container"><div className="loading">Carregando contas...</div></div>
 
     return (
         <div className="usuarios-container">
             <div className="usuarios-header">
                 <h1>{isAdmin ? 'Gerenciamento de Contas' : 'Meu Cadastro'}</h1>
                 {isAdmin && (
-                    <button className="btn-primary" onClick={openCreateModal}>
-                        + Criar Nova Conta
-                    </button>
+                    <button className="btn-primary" onClick={openCreateModal}>+ Criar Nova Conta</button>
                 )}
             </div>
 
-            {alert && (
-                <div className={`alert ${alert.includes('sucesso') ? 'alert-success' : 'alert-error'}`}>
-                    {alert}
+            {alert && <div className={`alert ${alert.includes('sucesso') ? 'alert-success' : 'alert-error'}`}>{alert}</div>}
+            
+            {/* --- CAMPO DE PESQUISA ADICIONADO [RFS04] --- */}
+            {isAdmin && (
+                <div className="filters-container" style={{ marginBottom: '20px' }}>
+                    <div className="filter-group" style={{ width: '100%', maxWidth: '400px' }}>
+                        <label>Buscar Usuário</label>
+                        <input 
+                            type="text" 
+                            placeholder="Buscar por Nome, Email ou CPF..." 
+                            value={searchTerm} 
+                            onChange={(e) => setSearchTerm(e.target.value)} 
+                        />
+                    </div>
                 </div>
             )}
 
@@ -318,59 +271,27 @@ export default function Usuarios({ userInfo }) {
                 <table className="usuarios-table">
                     <thead>
                         <tr>
-                            <th>Nome</th>
-                            <th>Email</th>
-                            <th>CPF/CNPJ</th>
-                            <th>Telefone</th>
-                            <th>Tipo de Conta</th>
-                            <th>Ações</th>
+                            <th>Nome</th><th>Email</th><th>CPF/CNPJ</th><th>Telefone</th><th>Tipo de Conta</th><th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {usuarios.map(usuario => {
+                        {/* Usando filteredUsuarios aqui */}
+                        {filteredUsuarios.map(usuario => {
                             const nome = usuario.nome || usuario.name || usuario.email || '-'
                             const cpf = usuario.cpf || '-'
                             const telefone = usuario.telefone ? formatTelefone(usuario.telefone) : '-'
                             const rawTipo = (usuario.tipoConta || '').toString().toLowerCase()
-                            let tipoKey = 'cliente'
-                            let tipoLabel = 'Cliente'
-                            if (rawTipo.includes('adm') || rawTipo.includes('administrador') || rawTipo.includes('admin')) {
-                                tipoKey = 'adm'
-                                tipoLabel = 'Administrador'
-                            } else if (rawTipo.includes('corretor')) {
-                                tipoKey = 'corretor'
-                                tipoLabel = 'Corretor'
-                            }
-
+                            let tipoKey = 'cliente'; let tipoLabel = 'Cliente'
+                            if (rawTipo.includes('adm') || rawTipo.includes('admin')) { tipoKey = 'adm'; tipoLabel = 'Administrador' }
+                            else if (rawTipo.includes('corretor')) { tipoKey = 'corretor'; tipoLabel = 'Corretor' }
                             const disableDelete = usuario.id === userInfo?.uid || usuario.uid === userInfo?.uid
-
                             return (
                                 <tr key={usuario.id}>
-                                    <td>{nome}</td>
-                                    <td>{usuario.email || '-'}</td>
-                                    <td>{cpf}</td>
-                                    <td>{telefone}</td>
+                                    <td>{nome}</td><td>{usuario.email || '-'}</td><td>{cpf}</td><td>{telefone}</td>
+                                    <td><span className={`badge badge-${tipoKey}`}>{tipoLabel}</span></td>
                                     <td>
-                                        <span className={`badge badge-${tipoKey}`}>
-                                            {tipoLabel}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button 
-                                            className="btn-secondary btn-sm"
-                                            onClick={() => openEditModal(usuario)}
-                                        >
-                                            Editar
-                                        </button>
-                                        {isAdmin && (
-                                            <button 
-                                                className="btn-danger btn-sm"
-                                                onClick={() => handleDeleteUser(usuario.id)}
-                                                disabled={disableDelete}
-                                            >
-                                                Excluir
-                                            </button>
-                                        )}
+                                        <button className="btn-secondary btn-sm" onClick={() => openEditModal(usuario)}>Editar</button>
+                                        {isAdmin && <button className="btn-danger btn-sm" onClick={() => handleDeleteUser(usuario.id)} disabled={disableDelete}>Excluir</button>}
                                     </td>
                                 </tr>
                             )
@@ -378,7 +299,6 @@ export default function Usuarios({ userInfo }) {
                     </tbody>
                 </table>
             </div>
-
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -389,60 +309,30 @@ export default function Usuarios({ userInfo }) {
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
                                 <label>Nome Completo *</label>
-                                <input
-                                    type="text"
-                                    value={formData.nome}
-                                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                                    required
-                                />
+                                <input type="text" value={formData.nome} onChange={(e) => setFormData({ ...formData, nome: e.target.value })} required />
                             </div>
                             <div className="form-group">
                                 <label>Email *</label>
-                                <input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    required
-                                />
+                                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
                             </div>
                             {modalMode === 'create' && (
                                 <div className="form-group">
                                     <label>Senha *</label>
-                                    <input
-                                        type="password"
-                                        value={formData.senha}
-                                        onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                                        required
-                                        minLength={6}
-                                    />
+                                    <input type="password" value={formData.senha} onChange={(e) => setFormData({ ...formData, senha: e.target.value })} required minLength={6} />
                                 </div>
                             )}
                             <div className="form-group">
                                 <label>CPF/CNPJ</label>
-                                <input
-                                    type="text"
-                                    value={formData.cpf}
-                                    onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
-                                    placeholder="000.000.000-00"
-                                />
+                                <input type="text" value={formData.cpf} onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })} placeholder="000.000.000-00" />
                             </div>
                             <div className="form-group">
                                 <label>Telefone</label>
-                                <input
-                                    type="text"
-                                    value={formData.telefone}
-                                    onChange={(e) => setFormData({ ...formData, telefone: formatTelefone(e.target.value) })}
-                                    placeholder="(00) 00000-0000"
-                                />
+                                <input type="text" value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: formatTelefone(e.target.value) })} placeholder="(00) 00000-0000" />
                             </div>
                             {isAdmin && (
                                 <div className="form-group">
                                     <label>Tipo de Conta *</label>
-                                    <select
-                                        value={formData.tipoConta}
-                                        onChange={(e) => setFormData({ ...formData, tipoConta: e.target.value })}
-                                        required
-                                    >
+                                    <select value={formData.tipoConta} onChange={(e) => setFormData({ ...formData, tipoConta: e.target.value })} required>
                                         <option value="cliente">Cliente</option>
                                         <option value="corretor">Corretor</option>
                                         <option value="adm">Administrador</option>
@@ -450,12 +340,8 @@ export default function Usuarios({ userInfo }) {
                                 </div>
                             )}
                             <div className="modal-actions">
-                                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
-                                    Cancelar
-                                </button>
-                                <button type="submit" className="btn-primary" disabled={creating}>
-                                    {creating ? 'Salvando...' : modalMode === 'edit' ? 'Salvar Alterações' : 'Criar Conta'}
-                                </button>
+                                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                                <button type="submit" className="btn-primary" disabled={creating}>{creating ? 'Salvando...' : modalMode === 'edit' ? 'Salvar Alterações' : 'Criar Conta'}</button>
                             </div>
                         </form>
                     </div>

@@ -2,17 +2,22 @@ import { useState, useEffect, useCallback } from 'react'
 import { documentosCollection, db, imoveisCollection, userInfoCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from 'firebase/firestore'
 import './documentos.css'
-import { useAuth } from '../../../context/AuthContext'
 
-export default function Documentos({  }) {
-    const { userProfile } = useAuth()
-    const userInfo = userProfile
+export default function Documentos({ userInfo }) {
     const [documentos, setDocumentos] = useState([])
     const [imoveis, setImoveis] = useState([])
     const [clientes, setClientes] = useState([])
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingDocumento, setEditingDocumento] = useState(null)
+    
+    // NOVOS ESTADOS DE FILTRO
+    const [filterInputs, setFilterInputs] = useState({
+        nome: '',
+        tipo: ''
+    })
+    const [filteredDocumentos, setFilteredDocumentos] = useState([])
+
     const [formData, setFormData] = useState({
         imovelId: '',
         tipo: '',
@@ -26,81 +31,70 @@ export default function Documentos({  }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
-    // Carregar lista de clientes
+    // ... (Mantenha loadClientes e loadImoveis iguais) ...
     const loadClientes = useCallback(async () => {
+        if (!isAdmin && !isCorretor) return;
         try {
             const snapshot = await getDocs(userInfoCollection)
             const clientesList = snapshot.docs
-                .map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }))
+                .map(doc => ({ id: doc.id, ...doc.data() }))
                 .filter(user => {
                     const tipo = (user.tipoConta || '').toString().toLowerCase()
                     return tipo.includes('cliente') || (!tipo.includes('adm') && !tipo.includes('corretor'))
                 })
             setClientes(clientesList)
-        } catch (err) {
-            console.error('Erro ao carregar clientes:', err)
-        }
-    }, [])
+        } catch (err) { console.error('Erro ao carregar clientes:', err) }
+    }, [isAdmin, isCorretor])
 
     const loadImoveis = useCallback(async () => {
         try {
-            // Todos os usuários podem ver a lista de imóveis; manteremos criação/edição restritas.
             let imoveisQuery = imoveisCollection
             const snapshot = await getDocs(imoveisQuery)
-            const imoveisList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
+            const imoveisList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
             setImoveis(imoveisList)
             return imoveisList
         } catch (err) {
             console.error('Erro ao carregar imóveis:', err)
             return []
         }
-    }, [isAdmin, isCorretor, userInfo?.uid])
+    }, [])
 
     const loadDocumentos = useCallback(async (imoveisList) => {
         try {
             setLoading(true)
-            let documentosQuery = documentosCollection
+            let q;
 
-            const snapshot = await getDocs(documentosQuery)
+            if (isAdmin || isCorretor) {
+                q = documentosCollection;
+            } else {
+                if (!userInfo?.uid) return;
+                q = query(documentosCollection, where('clienteVinculado', '==', userInfo.uid));
+            }
+
+            const snapshot = await getDocs(q)
             let documentosList = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }))
 
-            // Filtrar por cliente: clientes só veem documentos vinculados a eles
-            if (!isAdmin && !isCorretor) {
-                const clienteId = userInfo?.uid || userInfo?.id
-                // Filtrar documentos onde o cliente é o clienteVinculado
-                documentosList = documentosList.filter(d => {
-                    return d.clienteVinculado === clienteId || 
-                           d.clienteVinculado === userInfo?.id ||
-                           d.clienteId === clienteId ||
-                           d.clienteId === userInfo?.id
-                })
+            let allClientes = []
+            if (isAdmin || isCorretor) {
+                try {
+                    const clientesSnapshot = await getDocs(userInfoCollection)
+                    allClientes = clientesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                } catch (e) { console.log("Sem permissão para listar clientes") }
             }
-            
-            // Buscar informações dos clientes
-            const clientesSnapshot = await getDocs(userInfoCollection)
-            const allClientes = clientesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
 
-            // Buscar dados dos imóveis e clientes vinculados
             const documentosCompleto = documentosList.map(documento => {
                 const imovel = imoveisList.find(i => i.id === documento.imovelId)
                 let clienteVinculadoInfo = null
+                
                 if (documento.clienteVinculado) {
-                    clienteVinculadoInfo = allClientes.find(c => 
-                        c.id === documento.clienteVinculado || 
-                        c.uid === documento.clienteVinculado
-                    )
+                    if (isAdmin || isCorretor) {
+                        clienteVinculadoInfo = allClientes.find(c => c.id === documento.clienteVinculado)
+                    } else if (documento.clienteVinculado === userInfo.uid) {
+                        clienteVinculadoInfo = userInfo;
+                    }
                 }
                 return {
                     ...documento,
@@ -110,13 +104,25 @@ export default function Documentos({  }) {
             })
 
             setDocumentos(documentosCompleto)
+            setFilteredDocumentos(documentosCompleto) // Inicializa filtrados
         } catch (err) {
             console.error('Erro ao carregar documentos:', err)
-            setAlert('Erro ao carregar documentos')
         } finally {
             setLoading(false)
         }
     }, [isAdmin, isCorretor, userInfo])
+
+    // LÓGICA DE FILTRO
+    useEffect(() => {
+        let result = documentos;
+        if (filterInputs.tipo) {
+            result = result.filter(d => d.tipo === filterInputs.tipo)
+        }
+        if (filterInputs.nome) {
+            result = result.filter(d => d.nome.toLowerCase().includes(filterInputs.nome.toLowerCase()))
+        }
+        setFilteredDocumentos(result);
+    }, [filterInputs, documentos])
 
     useEffect(() => {
         loadImoveis()
@@ -127,11 +133,10 @@ export default function Documentos({  }) {
         if (imoveis.length >= 0) {
             loadDocumentos(imoveis)
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [imoveis])
 
+    // ... (Mantenha handleOpenModal, handleSubmit, handleDelete iguais) ...
     function handleOpenModal(documento = null) {
-        // Se está tentando editar e não é admin, bloquear
         if (documento && !isAdmin) {
             setAlert('Apenas administradores podem editar documentos')
             return
@@ -177,7 +182,6 @@ export default function Documentos({  }) {
             }
 
             if (editingDocumento) {
-                // Apenas Admin pode editar
                 if (!isAdmin) {
                     setAlert('Apenas administradores podem editar documentos')
                     return
@@ -185,7 +189,6 @@ export default function Documentos({  }) {
                 await updateDoc(doc(db, 'documentos', editingDocumento.id), documentoData)
                 setAlert('Documento atualizado com sucesso!')
             } else {
-                // Admin e Corretor podem cadastrar
                 if (!isAdmin && !isCorretor) {
                     setAlert('Apenas administradores e corretores podem cadastrar documentos')
                     return
@@ -204,16 +207,13 @@ export default function Documentos({  }) {
     }
 
     async function handleDelete(id) {
-        // Apenas Admin pode excluir
         if (!isAdmin) {
             setAlert('Apenas administradores podem excluir documentos')
             return
         }
-
         if (!window.confirm('Tem certeza que deseja excluir este documento?')) {
             return
         }
-
         try {
             await deleteDoc(doc(db, 'documentos', id))
             setAlert('Documento excluído com sucesso!')
@@ -222,6 +222,10 @@ export default function Documentos({  }) {
             console.error('Erro ao excluir documento:', err)
             setAlert('Erro ao excluir documento')
         }
+    }
+
+    function handleClearFilters() {
+        setFilterInputs({ nome: '', tipo: '' })
     }
 
     if (loading) {
@@ -249,8 +253,39 @@ export default function Documentos({  }) {
                 </div>
             )}
 
+            {/* --- NOVOS FILTROS --- */}
+            <div className="filters-container" style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'end' }}>
+                 <div className="filter-group">
+                    <label>Nome do Documento</label>
+                    <input 
+                        type="text" 
+                        placeholder="Buscar por nome..."
+                        value={filterInputs.nome}
+                        onChange={e => setFilterInputs({...filterInputs, nome: e.target.value})}
+                    />
+                </div>
+                <div className="filter-group">
+                    <label>Tipo</label>
+                    <select
+                        value={filterInputs.tipo}
+                        onChange={e => setFilterInputs({...filterInputs, tipo: e.target.value})}
+                    >
+                        <option value="">Todos</option>
+                        <option value="contrato">Contrato</option>
+                        <option value="escritura">Escritura</option>
+                        <option value="cpf">CPF</option>
+                        <option value="rg">RG</option>
+                        <option value="comprovante">Comprovante</option>
+                        <option value="outro">Outro</option>
+                    </select>
+                </div>
+                <button className="btn-secondary" onClick={handleClearFilters} style={{ height: '40px' }}>
+                    Limpar Filtros
+                </button>
+            </div>
+
             <div className="documentos-grid">
-                {documentos.map(documento => (
+                {filteredDocumentos.map(documento => (
                     <div key={documento.id} className="documento-card">
                         <div className="documento-header">
                             <h3>{documento.nome}</h3>
@@ -261,11 +296,9 @@ export default function Documentos({  }) {
                                 Imóvel: {documento.imovel.endereco}
                             </p>
                         )}
-                        {documento.clienteVinculadoInfo && (
-                            <p className="documento-cliente">
-                                Cliente: {documento.clienteVinculadoInfo.nome || documento.clienteVinculadoInfo.name || documento.clienteVinculadoInfo.email}
-                            </p>
-                        )}
+                        <p className="documento-cliente">
+                            Cliente: {documento.clienteVinculadoInfo?.nome || (documento.clienteVinculado === userInfo?.uid ? 'Você' : '-')}
+                        </p>
                         {documento.descricao && (
                             <p className="documento-descricao">{documento.descricao}</p>
                         )}
@@ -306,7 +339,7 @@ export default function Documentos({  }) {
                 ))}
             </div>
 
-            {documentos.length === 0 && (
+            {filteredDocumentos.length === 0 && (
                 <div className="empty-state">
                     <p>Nenhum documento encontrado.</p>
                 </div>

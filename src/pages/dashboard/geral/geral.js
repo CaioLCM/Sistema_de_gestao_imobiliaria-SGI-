@@ -16,44 +16,63 @@ export default function Geral({ userInfo }) {
     const [loading, setLoading] = useState(true)
 
     const loadStats = useCallback(async () => {
+        if (!userInfo) return;
+
         try {
             setLoading(true)
             
-            // Carregar estatísticas baseado no tipo de usuário
             const isAdmin = userInfo?.tipoConta === 'adm'
             const isCorretor = userInfo?.tipoConta === 'corretor'
+            const isCliente = !isAdmin && !isCorretor;
 
-            // Total de imóveis
-            // Todos os usuários podem ver as estatísticas baseadas nas coleções completas.
+            // 1. Total de imóveis (Público/Aberto para leitura)
             let imoveisQuery = imoveisCollection
             const imoveisSnapshot = await getDocs(imoveisQuery)
             const imoveis = imoveisSnapshot.docs.map(doc => doc.data())
             
-            // Total de pagamentos
-            let pagamentosQuery = pagamentosCollection
-            const pagamentosSnapshot = await getDocs(pagamentosQuery)
-            const pagamentos = pagamentosSnapshot.docs.map(doc => doc.data())
+            // 2. Total de pagamentos (Filtrado para cliente)
+            let pagamentosSnap;
+            if (isCliente) {
+                // Cliente só pode ver seus pagamentos (como inquilino/comprador)
+                const q = query(pagamentosCollection, where('clienteInquilinoComprador', '==', userInfo.uid))
+                pagamentosSnap = await getDocs(q)
+            } else {
+                // Adm/Corretor veem tudo
+                pagamentosSnap = await getDocs(pagamentosCollection)
+            }
+            const pagamentos = pagamentosSnap.docs.map(doc => doc.data())
 
-            // Total de documentos
-            let documentosQuery = documentosCollection
-            const documentosSnapshot = await getDocs(documentosQuery)
+            // 3. Total de documentos (Filtrado para cliente)
+            let documentosSize = 0;
+            if (isCliente) {
+                const q = query(documentosCollection, where('clienteVinculado', '==', userInfo.uid))
+                const snap = await getDocs(q)
+                documentosSize = snap.size
+            } else {
+                const snap = await getDocs(documentosCollection)
+                documentosSize = snap.size
+            }
 
-            // Total de usuários (apenas admin)
+            // 4. Total de usuários (Apenas Admin vê)
             let totalUsuarios = 0
             if (isAdmin) {
-                const usuariosSnapshot = await getDocs(userInfoCollection)
-                totalUsuarios = usuariosSnapshot.size
+                try {
+                    const usuariosSnapshot = await getDocs(userInfoCollection)
+                    totalUsuarios = usuariosSnapshot.size
+                } catch (e) {
+                    console.log("Acesso restrito a usuários")
+                }
             }
 
             // Calcular estatísticas
-            const imoveisVenda = imoveis.filter(i => i.tipo === 'venda').length
-            const imoveisAluguel = imoveis.filter(i => i.tipo === 'aluguel').length
+            const imoveisVenda = imoveis.filter(i => i.tipo === 'venda' || i.finalidade === 'venda').length
+            const imoveisAluguel = imoveis.filter(i => i.tipo === 'aluguel' || i.finalidade === 'locacao').length
             const pagamentosPendentes = pagamentos.filter(p => p.status === 'pendente').length
 
             setStats({
                 totalImoveis: imoveis.length,
                 totalPagamentos: pagamentos.length,
-                totalDocumentos: documentosSnapshot.size,
+                totalDocumentos: documentosSize,
                 totalUsuarios,
                 pagamentosPendentes,
                 imoveisVenda,
@@ -103,7 +122,7 @@ export default function Geral({ userInfo }) {
                 <div className="stat-card stat-success">
                     <div className="stat-icon">💳</div>
                     <div className="stat-content">
-                        <h3>Total de Pagamentos</h3>
+                        <h3>{userInfo?.tipoConta === 'cliente' ? 'Meus Pagamentos' : 'Total de Pagamentos'}</h3>
                         <p className="stat-value">{stats.totalPagamentos}</p>
                         <div className="stat-details">
                             <span>{stats.pagamentosPendentes} pendentes</span>
@@ -114,7 +133,7 @@ export default function Geral({ userInfo }) {
                 <div className="stat-card stat-info">
                     <div className="stat-icon">📄</div>
                     <div className="stat-content">
-                        <h3>Total de Documentos</h3>
+                        <h3>{userInfo?.tipoConta === 'cliente' ? 'Meus Documentos' : 'Total de Documentos'}</h3>
                         <p className="stat-value">{stats.totalDocumentos}</p>
                     </div>
                 </div>

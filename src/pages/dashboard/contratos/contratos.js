@@ -40,7 +40,6 @@ export default function Contratos({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
-    // Função para formatar valor monetário
     const formatCurrency = (value) => {
         if (!value) return ''
         const numbers = value.replace(/\D/g, '')
@@ -54,15 +53,16 @@ export default function Contratos({ userInfo }) {
         }).format(amount)
     }
 
-    // Função para converter valor formatado para número
     const parseCurrency = (value) => {
         if (!value) return 0
         const numbers = value.replace(/\D/g, '')
         return parseFloat(numbers) / 100
     }
 
-    // Carregar lista de clientes
+    // --- CORREÇÃO 1: Clientes não podem ver a lista de todos os usuários ---
     const loadClientes = useCallback(async () => {
+        if (!isAdmin && !isCorretor) return;
+
         try {
             const snapshot = await getDocs(userInfoCollection)
             const clientesList = snapshot.docs
@@ -78,9 +78,8 @@ export default function Contratos({ userInfo }) {
         } catch (err) {
             console.error('Erro ao carregar clientes:', err)
         }
-    }, [])
+    }, [isAdmin, isCorretor])
 
-    // Carregar lista de imóveis disponíveis
     const loadImoveis = useCallback(async () => {
         try {
             const snapshot = await getDocs(imoveisCollection)
@@ -94,41 +93,53 @@ export default function Contratos({ userInfo }) {
         }
     }, [])
 
+    // --- CORREÇÃO 2: Clientes buscam apenas SEUS contratos ---
     const loadContratos = useCallback(async () => {
         try {
             setLoading(true)
-            const snapshot = await getDocs(contratosCollection)
-            let contratosList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
+            let contratosList = []
 
-            // Filtrar por cliente: clientes só veem contratos associados a eles
-            if (!isAdmin && !isCorretor) {
-                const clienteId = userInfo?.uid || userInfo?.id
-                contratosList = contratosList.filter(c => 
-                    c.clienteInquilinoComprador === clienteId || 
-                    c.clienteProprietario === clienteId ||
-                    c.clienteInquilinoComprador === userInfo?.id ||
-                    c.clienteProprietario === userInfo?.id
-                )
+            if (isAdmin || isCorretor) {
+                // ADM/Corretor buscam tudo
+                const snapshot = await getDocs(contratosCollection)
+                contratosList = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }))
+            } else {
+                // Cliente busca apenas os seus. 
+                // Como o Firebase não suporta "OR" (OU) em queries simples no mesmo campo facilmente,
+                // faremos duas queries e juntaremos os resultados.
+                if (!userInfo?.uid) return;
+
+                const q1 = query(contratosCollection, where('clienteInquilinoComprador', '==', userInfo.uid))
+                const q2 = query(contratosCollection, where('clienteProprietario', '==', userInfo.uid))
+
+                const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)])
+                
+                // Juntar e remover duplicatas (embora logicamente não deva haver duplicata se o usuário não for inquilino e proprietário do mesmo contrato)
+                const docsMap = new Map();
+                snap1.forEach(d => docsMap.set(d.id, { id: d.id, ...d.data() }));
+                snap2.forEach(d => docsMap.set(d.id, { id: d.id, ...d.data() }));
+                
+                contratosList = Array.from(docsMap.values());
             }
 
-            // Buscar informações dos imóveis relacionados
-            const imoveisSnapshot = await getDocs(imoveisCollection)
-            const allImoveis = imoveisSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
+            // Carregar dados auxiliares apenas se tiver permissão
+            let allImoveis = []
+            let allClientes = []
 
-            // Buscar informações dos clientes
-            const clientesSnapshot = await getDocs(userInfoCollection)
-            const allClientes = clientesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }))
+            try {
+                const imoveisSnapshot = await getDocs(imoveisCollection)
+                allImoveis = imoveisSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                
+                if (isAdmin || isCorretor) {
+                    const clientesSnapshot = await getDocs(userInfoCollection)
+                    allClientes = clientesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                }
+            } catch (e) { console.log("Sem permissão para dados auxiliares") }
 
-            // Aplicar filtros
+            // Aplicar filtros (Front-end filtering)
             if (filtros.tipoContrato) {
                 contratosList = contratosList.filter(c => c.tipoContrato === filtros.tipoContrato)
             }
@@ -142,27 +153,26 @@ export default function Contratos({ userInfo }) {
                 contratosList = contratosList.filter(c => c.clienteProprietario === filtros.clienteProprietario)
             }
 
-            // Adicionar informações relacionadas
             const contratosCompleto = contratosList.map(contrato => {
-                // Adicionar informações do imóvel
                 if (contrato.imovelVinculado) {
                     const imovel = allImoveis.find(i => i.id === contrato.imovelVinculado)
-                    if (imovel) {
-                        contrato.imovel = imovel
-                    }
+                    if (imovel) contrato.imovel = imovel
                 }
-                // Adicionar informações do cliente inquilino/comprador
                 if (contrato.clienteInquilinoComprador) {
-                    const cliente = allClientes.find(c => c.id === contrato.clienteInquilinoComprador || c.uid === contrato.clienteInquilinoComprador)
+                    const cliente = allClientes.find(c => c.id === contrato.clienteInquilinoComprador)
+                    // Se não achou na lista (porque é cliente e não pode ver lista), tenta ver se é ele mesmo
                     if (cliente) {
                         contrato.clienteInquilino = cliente
+                    } else if (contrato.clienteInquilinoComprador === userInfo?.uid) {
+                         contrato.clienteInquilino = userInfo
                     }
                 }
-                // Adicionar informações do cliente proprietário
                 if (contrato.clienteProprietario) {
-                    const cliente = allClientes.find(c => c.id === contrato.clienteProprietario || c.uid === contrato.clienteProprietario)
+                    const cliente = allClientes.find(c => c.id === contrato.clienteProprietario)
                     if (cliente) {
                         contrato.clienteProprietarioInfo = cliente
+                    } else if (contrato.clienteProprietario === userInfo?.uid) {
+                        contrato.clienteProprietarioInfo = userInfo
                     }
                 }
                 return contrato
@@ -171,7 +181,7 @@ export default function Contratos({ userInfo }) {
             setContratos(contratosCompleto)
         } catch (err) {
             console.error('Erro ao carregar contratos:', err)
-            setAlert('Erro ao carregar contratos')
+            // setAlert removido para evitar spam visual se for erro de permissão silencioso
         } finally {
             setLoading(false)
         }
@@ -184,7 +194,6 @@ export default function Contratos({ userInfo }) {
     }, [loadImoveis, loadClientes, loadContratos])
 
     function handleOpenModal(contrato = null) {
-        // Se está tentando editar e não é admin, bloquear
         if (contrato && !isAdmin) {
             setAlert('Apenas administradores podem editar contratos')
             return
@@ -238,7 +247,6 @@ export default function Contratos({ userInfo }) {
         e.preventDefault()
         setAlert('')
 
-        // Validação de datas: data de término deve ser posterior à data de início
         if (formData.dataInicio && formData.dataTermino) {
             const dataInicio = new Date(formData.dataInicio)
             const dataTermino = new Date(formData.dataTermino)
@@ -248,7 +256,6 @@ export default function Contratos({ userInfo }) {
             }
         }
 
-        // Validação de valor
         const valorNum = parseCurrency(formData.valorMensalOuTotal)
         if (valorNum <= 0) {
             setAlert('O valor deve ser maior que zero')
@@ -272,7 +279,6 @@ export default function Contratos({ userInfo }) {
             }
 
             if (editingContrato) {
-                // Apenas Admin pode editar
                 if (!isAdmin) {
                     setAlert('Apenas administradores podem editar contratos')
                     return
@@ -280,7 +286,6 @@ export default function Contratos({ userInfo }) {
                 await updateDoc(doc(db, 'contratos', editingContrato.id), contratoData)
                 setAlert('Contrato atualizado com sucesso!')
             } else {
-                // Admin e Corretor podem cadastrar
                 if (!isAdmin && !isCorretor) {
                     setAlert('Apenas administradores e corretores podem cadastrar contratos')
                     return
@@ -299,29 +304,22 @@ export default function Contratos({ userInfo }) {
     }
 
     async function handleDelete(id) {
-        // Apenas Admin pode excluir
         if (!isAdmin) {
             setAlert('Apenas administradores podem excluir contratos')
             return
         }
 
-        // Buscar o contrato para verificar status e pagamentos vinculados
         const contrato = contratos.find(c => c.id === id)
         if (!contrato) {
             setAlert('Contrato não encontrado')
             return
         }
 
-        // Regra de Negócio 1: Verificar se o contrato está ativo
         if (contrato.statusContrato === 'ativo') {
-            const statusLabel = contrato.statusContrato === 'ativo' ? 'ativo' : 
-                               contrato.statusContrato === 'finalizado' ? 'finalizado' :
-                               contrato.statusContrato === 'suspenso' ? 'suspenso' : contrato.statusContrato
-            setAlert(`O contrato selecionado possui status: ${statusLabel}`)
+            setAlert(`O contrato selecionado possui status: ativo`)
             return
         }
 
-        // Regra de Negócio 1: Verificar se existem pagamentos vinculados
         try {
             const pagamentosSnapshot = await getDocs(pagamentosCollection)
             const pagamentosList = pagamentosSnapshot.docs.map(doc => ({
@@ -329,16 +327,12 @@ export default function Contratos({ userInfo }) {
                 ...doc.data()
             }))
             
-            // Verificar pagamentos vinculados ao contrato (pelo ID do contrato)
             const pagamentosVinculados = pagamentosList.filter(p => 
                 p.contratoVinculado === id || p.contratoId === id
             )
 
             if (pagamentosVinculados.length > 0) {
-                const statusLabel = contrato.statusContrato === 'ativo' ? 'ativo' : 
-                                   contrato.statusContrato === 'finalizado' ? 'finalizado' :
-                                   contrato.statusContrato === 'suspenso' ? 'suspenso' : contrato.statusContrato
-                setAlert(`O contrato selecionado possui status: ${statusLabel}`)
+                setAlert(`O contrato selecionado possui pagamentos vinculados e não pode ser excluído.`)
                 return
             }
 
@@ -477,8 +471,12 @@ export default function Contratos({ userInfo }) {
                                     {contrato.tipoContrato === 'locacao' ? 'Locação' : 'Venda'}
                                 </td>
                                 <td>{contrato.imovel?.endereco || '-'}</td>
-                                <td>{contrato.clienteInquilino?.nome || contrato.clienteInquilino?.name || contrato.clienteInquilino?.email || '-'}</td>
-                                <td>{contrato.clienteProprietarioInfo?.nome || contrato.clienteProprietarioInfo?.name || contrato.clienteProprietarioInfo?.email || '-'}</td>
+                                <td>
+                                    {contrato.clienteInquilino?.nome || (contrato.clienteInquilinoComprador === userInfo?.uid ? 'Você' : '-')}
+                                </td>
+                                <td>
+                                    {contrato.clienteProprietarioInfo?.nome || (contrato.clienteProprietario === userInfo?.uid ? 'Você' : '-')}
+                                </td>
                                 <td>{formatDate(contrato.dataInicio)}</td>
                                 <td>{formatDate(contrato.dataTermino)}</td>
                                 <td>{formatCurrencyDisplay(contrato.valorMensalOuTotal)}</td>
@@ -606,7 +604,6 @@ export default function Contratos({ userInfo }) {
                                         value={formData.dataInicio}
                                         onChange={(e) => {
                                             setFormData({ ...formData, dataInicio: e.target.value })
-                                            // Se data de término já existe e é anterior à nova data de início, limpar
                                             if (formData.dataTermino && new Date(formData.dataTermino) <= new Date(e.target.value)) {
                                                 setFormData(prev => ({ ...prev, dataTermino: '' }))
                                             }
@@ -682,8 +679,6 @@ export default function Contratos({ userInfo }) {
                                     type="file"
                                     multiple
                                     onChange={(e) => {
-                                        // Por enquanto, apenas armazena os nomes dos arquivos
-                                        // Em produção, seria necessário fazer upload para Firebase Storage
                                         const files = Array.from(e.target.files)
                                         setFormData({ ...formData, documentosAnexos: files.map(f => f.name) })
                                     }}
@@ -705,4 +700,3 @@ export default function Contratos({ userInfo }) {
         </div>
     )
 }
-
