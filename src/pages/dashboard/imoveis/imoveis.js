@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-// ADICIONADO: contratosCollection para a validação de exclusão
 import { imoveisCollection, db, userInfoCollection, contratosCollection } from '../../../firebase'
 import { getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from 'firebase/firestore'
 import './imoveis.css'
@@ -40,12 +39,27 @@ export default function Imoveis({ userInfo }) {
     const isAdmin = userInfo?.tipoConta === 'adm'
     const isCorretor = userInfo?.tipoConta === 'corretor'
 
+    // Formata enquanto digita (Input)
     const formatCurrency = (value) => {
         if (!value) return ''
         const numbers = value.replace(/\D/g, '')
         if (!numbers) return ''
         const amount = parseFloat(numbers) / 100
-        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(amount)
+    }
+
+    // ADICIONADO: Formata para exibição (Display nos Cards)
+    function formatCurrencyDisplay(value) {
+        if (!value) return 'R$ 0,00'
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+        }).format(value)
     }
 
     const parseCurrency = (value) => {
@@ -185,12 +199,10 @@ export default function Imoveis({ userInfo }) {
         }
     }
 
-    // --- LÓGICA DE EXCLUSÃO COM VALIDAÇÃO [RFC02] ---
     async function handleDelete(id) {
         if (!window.confirm('Tem certeza que deseja excluir este imóvel?')) return
 
         try {
-            // Verifica se há contratos ativos vinculados a este imóvel
             const q = query(contratosCollection, where('imovelVinculado', '==', id), where('statusContrato', '==', 'ativo'))
             const snapshot = await getDocs(q)
 
