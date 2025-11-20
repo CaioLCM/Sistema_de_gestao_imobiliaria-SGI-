@@ -17,8 +17,8 @@ const firebaseConfig = {
 
 export default function Usuarios({ userInfo }) {
     const [usuarios, setUsuarios] = useState([])
-    const [filteredUsuarios, setFilteredUsuarios] = useState([]) // Estado para lista filtrada
-    const [searchTerm, setSearchTerm] = useState('') // Estado do termo de busca
+    const [filteredUsuarios, setFilteredUsuarios] = useState([])
+    const [searchTerm, setSearchTerm] = useState('')
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [modalMode, setModalMode] = useState('create')
@@ -45,7 +45,6 @@ export default function Usuarios({ userInfo }) {
         }
     }, [userInfo])
 
-    // Filtro de pesquisa [RFS04]
     useEffect(() => {
         if (!searchTerm) {
             setFilteredUsuarios(usuarios)
@@ -100,11 +99,16 @@ export default function Usuarios({ userInfo }) {
     }
 
     const formatCpf = (value = '') => {
-        const digits = value.replace(/\D/g, '').slice(0, 11)
+        const digits = value.replace(/\D/g, '').slice(0, 14) // Limita a 14 dígitos (CNPJ) ou 11 (CPF)
         let formatted = digits
-        if (digits.length > 3 && digits.length <= 6) formatted = `${digits.slice(0, 3)}.${digits.slice(3)}`
-        else if (digits.length > 6 && digits.length <= 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
-        else if (digits.length > 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+        if (digits.length <= 11) {
+            if (digits.length > 3 && digits.length <= 6) formatted = `${digits.slice(0, 3)}.${digits.slice(3)}`
+            else if (digits.length > 6 && digits.length <= 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`
+            else if (digits.length > 9) formatted = `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`
+        } else {
+            // Formatação básica de CNPJ se passar de 11 dígitos
+            if (digits.length > 12) formatted = `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`
+        }
         return formatted
     }
 
@@ -143,7 +147,7 @@ export default function Usuarios({ userInfo }) {
     }
 
     async function handleCreateUser(e) {
-        e.preventDefault()
+        if(e) e.preventDefault()
         setAlert('')
         setCreating(true)
         let secondaryApp = null;
@@ -178,7 +182,7 @@ export default function Usuarios({ userInfo }) {
     }
 
     async function handleUpdateUser(e) {
-        e.preventDefault()
+        if(e) e.preventDefault()
         if (!editingUser) return
         if (!isAdmin && editingUser.uid !== userInfo?.uid && editingUser.id !== userInfo?.uid) {
             setAlert('Você só pode editar seu próprio cadastro')
@@ -211,9 +215,30 @@ export default function Usuarios({ userInfo }) {
         }
     }
 
+    // --- FUNÇÃO CENTRAL DE ENVIO COM VALIDAÇÃO ---
     function handleSubmit(e) {
-        if (modalMode === 'edit') handleUpdateUser(e)
-        else handleCreateUser(e)
+        e.preventDefault()
+
+        // Validação de CPF/CNPJ
+        const cleanCpf = formData.cpf.replace(/\D/g, '')
+        if (cleanCpf.length !== 11 && cleanCpf.length !== 14) {
+            setAlert('CPF/CNPJ incompleto. Digite 11 números para CPF ou 14 para CNPJ.')
+            return
+        }
+
+        // Validação de Telefone
+        const cleanPhone = formData.telefone.replace(/\D/g, '')
+        if (cleanPhone.length < 10 || cleanPhone.length > 11) {
+            setAlert('Telefone inválido. Deve conter DDD + número (10 ou 11 dígitos).')
+            return
+        }
+
+        // Se passou na validação, chama a função correta
+        if (modalMode === 'edit') {
+            handleUpdateUser() // Não passa 'e' pois já prevenimos o default aqui
+        } else {
+            handleCreateUser()
+        }
     }
 
     async function handleDeleteUser(userId) {
@@ -252,7 +277,6 @@ export default function Usuarios({ userInfo }) {
 
             {alert && <div className={`alert ${alert.includes('sucesso') ? 'alert-success' : 'alert-error'}`}>{alert}</div>}
             
-            {/* --- CAMPO DE PESQUISA ADICIONADO [RFS04] --- */}
             {isAdmin && (
                 <div className="filters-container" style={{ marginBottom: '20px' }}>
                     <div className="filter-group" style={{ width: '100%', maxWidth: '400px' }}>
@@ -275,7 +299,6 @@ export default function Usuarios({ userInfo }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {/* Usando filteredUsuarios aqui */}
                         {filteredUsuarios.map(usuario => {
                             const nome = usuario.nome || usuario.name || usuario.email || '-'
                             const cpf = usuario.cpf || '-'
@@ -322,12 +345,13 @@ export default function Usuarios({ userInfo }) {
                                 </div>
                             )}
                             <div className="form-group">
-                                <label>CPF/CNPJ</label>
-                                <input type="text" value={formData.cpf} onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })} placeholder="000.000.000-00" />
+                                <label>CPF/CNPJ *</label>
+                                <input type="text" value={formData.cpf} onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })} placeholder="000.000.000-00" required />
+                                <small>Preencha completamente os 11 dígitos</small>
                             </div>
                             <div className="form-group">
-                                <label>Telefone</label>
-                                <input type="text" value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: formatTelefone(e.target.value) })} placeholder="(00) 00000-0000" />
+                                <label>Telefone *</label>
+                                <input type="text" value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: formatTelefone(e.target.value) })} placeholder="(00) 00000-0000" required />
                             </div>
                             {isAdmin && (
                                 <div className="form-group">
