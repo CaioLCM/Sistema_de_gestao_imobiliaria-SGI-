@@ -11,6 +11,7 @@ import Pagamentos from './pagamentos/pagamentos'
 import Documentos from './documentos/documentos'
 import Contratos from './contratos/contratos'
 import Usuarios from './usuarios/usuarios'
+import Relatorios from './relatorios/relatorios'
 
 export default function Dashboard() {
     const navigate = useNavigate()
@@ -103,6 +104,8 @@ export default function Dashboard() {
                 return <Contratos userInfo={userInfo} />
             case "contas":
                 return <Usuarios userInfo={userInfo} canCreateAccounts={isAdmin} />
+            case "relatorios":
+                return <Relatorios userInfo={userInfo} />
             default:
                 return <div className="dashboard-content">Página não encontrada</div>
         }
@@ -162,6 +165,12 @@ export default function Dashboard() {
                         onClick={() => setAba("contratos")}
                     >
                         <span>📋</span> Contratos
+                    </button>
+                    <button 
+                        className={`nav-item ${aba === "relatorios" ? 'active' : ''}`}
+                        onClick={() => setAba("relatorios")}
+                    >
+                        <span>📈</span> Relatórios
                     </button>
                     <button 
                         className={`nav-item ${aba === "contas" ? 'active' : ''}`}
